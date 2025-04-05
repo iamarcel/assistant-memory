@@ -1,3 +1,4 @@
+import { fromString, typeid } from "typeid-js";
 import { z } from "zod";
 
 const TYPE_ID_LENGTH = 26;
@@ -40,12 +41,16 @@ export const typeIdSchema = <T extends IdType>(type: T) =>
     .length(ID_TYPE_PREFIXES[type].length + 1 + TYPE_ID_LENGTH)
     .transform((input) => input as TypeId<T>);
 
-export const typeIdFromUuid = <T extends IdType>(
+export const typeIdFromString = <T extends IdType>(
   type: T,
-  uuid: string
-): TypeId<T> => `${ID_TYPE_PREFIXES[type]}_${uuid}`;
+  val: string,
+): TypeId<T> => fromString(val, ID_TYPE_PREFIXES[type]) as TypeId<T>;
 
-export const typeIdToUuid = <T extends IdType>(
+export const typeIdToString = <T extends IdType>(
   type: T,
-  typeId: TypeId<T>
-): string => typeId.split("_").pop()!;
+  typeId: TypeId<T>,
+): string => typeId;
+
+export const newTypeId = <T extends IdType>(type: T): TypeId<T> => {
+  return typeid(ID_TYPE_PREFIXES[type]).toString() as TypeId<T>;
+};

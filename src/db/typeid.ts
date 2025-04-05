@@ -1,15 +1,21 @@
+import {
+  IdType,
+  newTypeId,
+  TypeId,
+  typeIdFromString,
+  typeIdToString,
+} from "../types/typeid";
 import { customType } from "drizzle-orm/pg-core";
-import { IdType, TypeId, typeIdFromUuid, typeIdToUuid } from "~/types/typeid";
 
 export const typeId = <const T extends IdType>(type: T) =>
   customType<{ data: TypeId<T>; default: true; driverData: string }>({
     dataType() {
-      return "uuid";
+      return "text";
     },
     fromDriver(value: string) {
-      return typeIdFromUuid(type, value);
+      return typeIdFromString(type, value);
     },
     toDriver(value: TypeId<T>) {
-      return typeIdToUuid(type, value);
+      return typeIdToString(type, value);
     },
-  });
+  })().$defaultFn(() => newTypeId(type));

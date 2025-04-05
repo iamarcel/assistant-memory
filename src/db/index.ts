@@ -1,9 +1,12 @@
+import * as schema from "./schema";
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { env } from "~/utils/env";
 
 const db = drizzle({
+  schema,
   connection: {
-    connectionString: process.env.DATABASE_URL!,
+    connectionString: env.DATABASE_URL,
     ssl: false,
   },
   casing: "snake_case",

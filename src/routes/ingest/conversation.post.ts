@@ -1,20 +1,20 @@
-import { sql, eq, desc, cosineDistance } from "drizzle-orm";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 import {
-  sources,
-  nodes,
-  nodeMetadata,
   edges,
   nodeEmbeddings,
+  nodeMetadata,
+  nodes,
+  sources,
   sourceLinks,
   users,
 } from "~/db/schema";
-import { generateEmbeddings } from "~/lib/embeddings";
-import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
-import { TypeId, typeIdSchema } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
+import { TypeId, typeIdSchema } from "~/types/typeid";
+import { findSimilarNodes } from "~/lib/search";
 import { env } from "~/utils/env";
+import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
+import { generateEmbeddings } from "~/lib/embeddings";
 
 const ingestConversationRequestSchema = z.object({
   userId: typeIdSchema("user"),
@@ -106,38 +106,13 @@ export default defineEventHandler(async (event) => {
   // Format conversation as XML for the LLM
   const conversationXml = formatConversationAsXml(conversation.messages);
 
-  // Generate embedding for the entire conversation to find similar nodes
-  const conversationEmbedding = await generateEmbeddings({
-    model: "jina-embeddings-v3",
-    task: "retrieval.query",
-    input: [conversationXml],
-  });
-
-  if (!conversationEmbedding.data[0]?.embedding) {
-    throw new Error("Failed to generate embedding for conversation");
-  }
-
-  // Find similar nodes based on embedding similarity using Drizzle query builder
-  const embedding = conversationEmbedding.data[0].embedding;
-
   // Get similar nodes with their metadata in a single query
-  const similarity = sql<number>`1 - (${cosineDistance(nodeEmbeddings.embedding, embedding)})`;
-  const similarNodes = await db
-    .select({
-      id: nodes.id,
-      type: nodes.nodeType,
-      label: nodeMetadata.label,
-      description: nodeMetadata.description,
-      similarity,
-    })
-    .from(nodeEmbeddings)
-    .innerJoin(nodes, eq(nodeEmbeddings.nodeId, nodes.id))
-    .innerJoin(nodeMetadata, eq(nodes.id, nodeMetadata.nodeId))
-    .where(eq(nodes.userId, userId))
-    .orderBy(desc(similarity))
-    .limit(10);
-
-  console.log(similarNodes);
+  const similarNodes = await findSimilarNodes({
+    userId,
+    text: conversationXml,
+    limit: 10,
+    similarityThreshold: 0.7,
+  });
 
   // Create a mapping from real node IDs to temporary IDs for the prompt
   const existingNodes = similarNodes.map((node, index) => ({
@@ -206,8 +181,6 @@ Then create edges between these nodes to represent their relationships using the
 
 Focus on extracting the most significant and meaningful information. Quality is more important than quantity.`;
 
-  console.log("prompt", prompt);
-
   const completion = await client.beta.chat.completions.parse({
     messages: [{ role: "user", content: prompt }],
     model: "gpt-4o-mini",
@@ -237,8 +210,6 @@ Focus on extracting the most significant and meaningful information. Quality is 
   });
 
   const parsed = completion.choices[0]?.message.parsed;
-
-  console.log("Response", parsed);
 
   if (!parsed) {
     throw new Error("Failed to parse LLM response");
@@ -300,7 +271,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
   // Insert edges with mapped IDs
   let edgesCreated = 0;
   const edgeInserts = [];
-  
+
   for (const edge of parsed.edges) {
     const sourceNodeId = idMap.get(edge.sourceId);
     const targetNodeId = idMap.get(edge.targetId);
@@ -319,7 +290,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
       edgeType: edge.type,
     });
   }
-  
+
   // Batch insert all edges with onConflictDoNothing to handle duplicates
   if (edgeInserts.length > 0) {
     const result = await db
@@ -327,7 +298,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
       .values(edgeInserts)
       .onConflictDoNothing({ target: [edges.sourceNodeId, edges.targetNodeId] })
       .returning();
-    
+
     edgesCreated = result.length;
   }
 

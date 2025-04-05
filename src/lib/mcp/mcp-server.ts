@@ -8,7 +8,7 @@ import { SSEServerTransport } from "./sse";
 const transports: { [sessionId: string]: SSEServerTransport } = {};
 
 // Create an MCP server
-const server = new McpServer({
+export const server = new McpServer({
   name: "Demo",
   version: "1.0.0",
 });

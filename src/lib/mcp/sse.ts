@@ -7,8 +7,6 @@ import {
 import { Encoding, EventHandlerRequest, EventStream, H3Event } from "h3";
 import { v7 as uuid } from "uuid";
 
-const MAXIMUM_MESSAGE_SIZE = "4mb";
-
 /**
  * Server transport for SSE: this will send messages over an SSE connection and receive messages from HTTP POST requests.
  *

@@ -1,0 +1,43 @@
+At its heart, we're building a **Lifelong Personal Memory System**. Think of it as a dynamic, ever-evolving digital extension of _your_ mind, specifically designed to integrate deeply with your AI assistant within Petals. Its purpose isn't just to store data, but to understand it, connect it, and make it instantly accessible, providing context and recall that feels intuitive, almost pre-cognitive. It’s designed to combat the ephemerality of digital interactions and the limitations of human memory, creating a persistent, searchable, and _meaningful_ repository of your personal universe – conversations, knowledge, ideas, preferences, history. The core principle is **structured meaning over unstructured soup**; we prioritize understanding the _relationships_ between pieces of information, not just finding textually similar fragments. This system is envisioned as fundamentally _yours_, initially, but architected for scalability and robust multi-user privacy from the ground up.
+
+src dir is aliased to ~
+
+- Nitro (H3) server in TypeScript
+- Server runs an MCP server and has API endpoints, defined in ~/server
+- ~/lib should contain all the logic side, well-organized
+
+## Library code
+
+It's very important to have clear, limited, separated responsibilities across components.
+
+Code in lib should be well-organized and each element of the lib should be as self-contained as possible.
+
+Only add comments in code when absolutely necessary—99% of the time the code itself is clear _or_ you can organize the code (with proper names, function composition) in a way that makes the code extremely easy to read and understand, while still being highly performant.
+
+"Public" methods and interfaces (things that will be used by other components) should have clear, concise descriptions that help us use them properly.
+
+Components in the library should mostly define their own minimal types to ensure they're composable and we don't accidentally introduce dependencies on specific data elements that are not strictly necessary.
+
+We like using Zod schemas, even to define types. Don't manually check for types, vales, don't assert types unless strictly necessary. Most of the time we can run a Zod validation which keeps code clean and checks types at runtime as well.
+
+## Data Structure
+
+- We use Drizzle and PostgreSQL with the pgvector extension
+- The Drizzle schema is in /src/db/schema.ts
+- Don't create migrations—the drizzle-kit CLI will handle that for us
+
+Nodes, edges etc. are user-scoped so always ensure we're not accidentally touching data that belongs to other users.
+
+## Typescript best practices
+
+- Don't use `any`, either explicitly or implicitly. Use `unknown` if needed and correctly verify types. Never "cheat" your way out of correct types. If it really doesn't work out, halt and ask the user for help.
+- Explicitly type function return values where possible as it greatly increases both code clarity and editor type checking performance. Define type aliases if it helps make code mode clear.
+- Type everything as strictly and narrowly as possible.
+- Use generics to ensure the exact types we want are being used and returned.
+- Write type helpers if needed.
+
+## Error Handling / API / Server
+
+Don't try-catch unless absolutely necessary, it makes code hard to read and too long. We prefer to let errors propagate all the way to the endpoint, this way it's easier to debug and we can handle it where it usually needs to be handled: at the user side.
+
+Validate data coming in to the server and API.

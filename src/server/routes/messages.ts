@@ -1,4 +1,4 @@
-import { getTransport } from "~/lib/mcp-server";
+import { getTransport } from "~/lib/mcp";
 
 export default defineEventHandler(async (event) => {
   const sessionId = getQuery(event)["sessionId"].toString();

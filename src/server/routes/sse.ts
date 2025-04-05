@@ -1,5 +1,9 @@
-import McpServer, { addTransport, removeTransport } from "~/lib/mcp-server.js";
-import { SSEServerTransport } from "~/lib/sse";
+import {
+  addTransport,
+  removeTransport,
+  server,
+  SSEServerTransport,
+} from "~/lib/mcp";
 
 export default defineEventHandler(async (event) => {
   setResponseStatus(event, 200);
@@ -23,7 +27,7 @@ export default defineEventHandler(async (event) => {
   const res = eventStream.send();
 
   console.log("Connecting transport");
-  await McpServer.connect(transport);
+  await server.connect(transport);
 
   console.log("Returning event stream");
   return res;

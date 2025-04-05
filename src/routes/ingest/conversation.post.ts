@@ -12,6 +12,7 @@ import {
 } from "~/db/schema";
 import { generateEmbeddings } from "~/lib/embeddings";
 import { findSimilarNodes } from "~/lib/search";
+import { ensureDayNode } from "~/lib/temporal";
 import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
 import { TypeId, typeIdSchema } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
@@ -86,6 +87,9 @@ export default defineEventHandler(async (event) => {
     await readBody(event),
   );
   const db = await useDatabase();
+
+  // --- Ensure Day Node Exists ---
+  const dayNodeId = await ensureDayNode(db, userId);
 
   // Ensure user exists
   await db
@@ -290,6 +294,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
     id: TypeId<"node">;
     label: string;
     description: string;
+    nodeType: z.infer<typeof NodeTypeEnum>;
   }> = [];
 
   for (const node of parsed.nodes) {
@@ -319,6 +324,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
       id: insertedNode.id,
       label: node.label,
       description: node.description || "",
+      nodeType: node.type,
     });
 
     // Insert node metadata
@@ -353,6 +359,27 @@ Focus on extracting the most significant and meaningful information. Quality is 
     });
   }
 
+  // Create edges linking new nodes to the day node
+  const newEdgesToDayNode: Array<typeof edges.$inferInsert> = [];
+  for (const node of nodeInserts) {
+    // Only link non-Temporal nodes to the day node
+    if (node.nodeType !== NodeTypeEnum.enum.Temporal && node.id !== dayNodeId) {
+      newEdgesToDayNode.push({
+        userId,
+        sourceNodeId: node.id, // Corrected from sourceId
+        targetNodeId: dayNodeId,
+        edgeType:
+          node.nodeType === NodeTypeEnum.enum.Event
+            ? EdgeTypeEnum.enum.OCCURRED_ON
+            : EdgeTypeEnum.enum.MENTIONED_IN,
+        metadata: { createdBy: "ingestion" }, // Add relevant metadata
+      });
+    }
+  }
+
+  // Add day node links to the edges to insert
+  edgeInserts.push(...newEdgesToDayNode);
+
   // Batch insert all edges with onConflictDoNothing to handle duplicates
   if (edgeInserts.length > 0) {
     const result = await db
@@ -367,8 +394,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
   // Generate embeddings for new nodes
   if (nodeInserts.length > 0) {
     const embeddingInputs = nodeInserts.map(
-      (node) =>
-        `${node.label}${node.description ? `: ${node.description}` : ""}`,
+      (n) => `${n.label}: ${n.description}`,
     );
 
     const embeddings = await generateEmbeddings({
@@ -394,7 +420,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
       await db.insert(nodeEmbeddings).values({
         nodeId: nodeInserts[i]!.id,
         embedding,
-        modelName: "jina-embeddings-v3",
+        modelName: "jina-embeddings-v2-base-en",
       });
     }
   }

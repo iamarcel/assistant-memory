@@ -44,6 +44,10 @@ export const nodesRelations = relations(nodes, ({ one }) => ({
     fields: [nodes.userId],
     references: [users.id],
   }),
+  metadata: one(nodeMetadata, {
+    fields: [nodes.id],
+    references: [nodeMetadata.nodeId],
+  }),
 }));
 
 export const nodeMetadata = pgTable(

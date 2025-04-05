@@ -20,6 +20,10 @@ Components in the library should mostly define their own minimal types to ensure
 
 We like using Zod schemas, even to define types. Don't manually check for types, vales, don't assert types unless strictly necessary. Most of the time we can run a Zod validation which keeps code clean and checks types at runtime as well.
 
+Write all database queries Drizzle-native. Don't write SQL queries.
+
+When solving problems, implement the solution in the smallest possible way. Don't over-engineer. Implement the obvious, elegant solution. Refactoring is allowed if it makes the final solution much better, and preferred over overly complicating things to twist yourself into a corner.
+
 ## Data Structure
 
 - We use Drizzle and PostgreSQL with the pgvector extension

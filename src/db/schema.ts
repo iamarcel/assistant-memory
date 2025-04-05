@@ -8,6 +8,7 @@ import {
   jsonb,
   vector,
   index,
+  unique,
 } from "drizzle-orm/pg-core";
 import { EdgeType, NodeType } from "~/types/graph";
 
@@ -95,6 +96,7 @@ export const edges = pgTable(
     // Indexes on (userId, sourceNodeId), (userId, targetNodeId), (userId, edgeType)
   },
   (table) => [
+    unique().on(table.sourceNodeId, table.targetNodeId),
     index("edges_user_id_source_node_id_idx").on(
       table.userId,
       table.sourceNodeId,

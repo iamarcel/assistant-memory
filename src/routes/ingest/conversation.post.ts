@@ -1,3 +1,4 @@
+import { sql, eq, desc, cosineDistance } from "drizzle-orm";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 import {
@@ -44,6 +45,36 @@ function formatConversationAsXml(
     .join("\n");
 }
 
+/**
+ * Formats nodes for inclusion in the LLM prompt
+ */
+function formatExistingNodesForPrompt(
+  existingNodes: Array<{
+    id: TypeId<"node">;
+    type: string;
+    label: string;
+    description: string | null;
+    tempId: string;
+  }>,
+): string {
+  if (existingNodes.length === 0) {
+    return "";
+  }
+
+  const nodesJson = existingNodes.map((node) => ({
+    id: node.tempId,
+    type: node.type,
+    label: node.label,
+    description: node.description || "",
+  }));
+
+  return `
+<existing_nodes>
+${JSON.stringify(nodesJson, null, 2)}
+</existing_nodes>
+`;
+}
+
 export default defineEventHandler(async (event) => {
   const { userId, conversation } = ingestConversationRequestSchema.parse(
     await readBody(event),
@@ -75,6 +106,61 @@ export default defineEventHandler(async (event) => {
   // Format conversation as XML for the LLM
   const conversationXml = formatConversationAsXml(conversation.messages);
 
+  // Generate embedding for the entire conversation to find similar nodes
+  const conversationEmbedding = await generateEmbeddings({
+    model: "jina-embeddings-v3",
+    task: "retrieval.query",
+    input: [conversationXml],
+  });
+
+  if (!conversationEmbedding.data[0]?.embedding) {
+    throw new Error("Failed to generate embedding for conversation");
+  }
+
+  // Find similar nodes based on embedding similarity using Drizzle query builder
+  const embedding = conversationEmbedding.data[0].embedding;
+
+  // Get similar nodes with their metadata in a single query
+  const similarity = sql<number>`1 - (${cosineDistance(nodeEmbeddings.embedding, embedding)})`;
+  const similarNodes = await db
+    .select({
+      id: nodes.id,
+      type: nodes.nodeType,
+      label: nodeMetadata.label,
+      description: nodeMetadata.description,
+      similarity,
+    })
+    .from(nodeEmbeddings)
+    .innerJoin(nodes, eq(nodeEmbeddings.nodeId, nodes.id))
+    .innerJoin(nodeMetadata, eq(nodes.id, nodeMetadata.nodeId))
+    .where(eq(nodes.userId, userId))
+    .orderBy(desc(similarity))
+    .limit(10);
+
+  console.log(similarNodes);
+
+  // Create a mapping from real node IDs to temporary IDs for the prompt
+  const existingNodes = similarNodes.map((node, index) => ({
+    id: node.id,
+    type: node.type,
+    label: node.label ?? "",
+    description: node.description,
+    tempId: `existing_${node.type.toLowerCase()}_${index + 1}`,
+  }));
+
+  // Create a mapping from temporary IDs to real node IDs
+  const existingIdMap = new Map<string, TypeId<"node">>();
+  for (const node of existingNodes) {
+    existingIdMap.set(node.tempId, node.id);
+  }
+
+  // Also create a mapping to track which real nodes we've already processed
+  // so we don't fetch their metadata again
+  const processedNodeIds = new Set<TypeId<"node">>();
+  for (const node of existingNodes) {
+    processedNodeIds.add(node.id);
+  }
+
   // Process conversation text to subgraph
   const { OpenAI } = await import("openai");
   const client = new OpenAI({
@@ -90,6 +176,7 @@ IMPORTANT: Do NOT respond to the conversation content. Instead, analyze it and e
 <conversation>
 ${conversationXml}
 </conversation>
+${formatExistingNodesForPrompt(existingNodes)}
 
 Extract the following elements:
 1. People mentioned (real or fictional)
@@ -107,9 +194,19 @@ For each element, create a node with:
 - A concise label (name/title)
 - A brief description providing context
 
+${
+  existingNodes.length > 0
+    ? `
+IMPORTANT: I've provided some existing nodes that may be relevant to this conversation. If any of these nodes match entities in the conversation, use them instead of creating new nodes. You can reference these existing nodes by their ID in your edges.
+`
+    : ""
+}
+
 Then create edges between these nodes to represent their relationships using the appropriate edge types.
 
 Focus on extracting the most significant and meaningful information. Quality is more important than quantity.`;
+
+  console.log("prompt", prompt);
 
   const completion = await client.beta.chat.completions.parse({
     messages: [{ role: "user", content: prompt }],
@@ -141,12 +238,19 @@ Focus on extracting the most significant and meaningful information. Quality is 
 
   const parsed = completion.choices[0]?.message.parsed;
 
+  console.log("Response", parsed);
+
   if (!parsed) {
     throw new Error("Failed to parse LLM response");
   }
 
   // Create a temporary ID to final ID mapping
   const idMap = new Map<string, TypeId<"node">>();
+
+  // First, add all existing node mappings
+  for (const [tempId, realId] of existingIdMap.entries()) {
+    idMap.set(tempId, realId);
+  }
 
   // Insert nodes and create the ID mapping
   const nodeInserts: Array<{
@@ -156,6 +260,11 @@ Focus on extracting the most significant and meaningful information. Quality is 
   }> = [];
 
   for (const node of parsed.nodes) {
+    // Skip if this is an existing node (already in idMap)
+    if (idMap.has(node.id)) {
+      continue;
+    }
+
     // Insert node
     const [insertedNode] = await db
       .insert(nodes)
@@ -190,6 +299,8 @@ Focus on extracting the most significant and meaningful information. Quality is 
 
   // Insert edges with mapped IDs
   let edgesCreated = 0;
+  const edgeInserts = [];
+  
   for (const edge of parsed.edges) {
     const sourceNodeId = idMap.get(edge.sourceId);
     const targetNodeId = idMap.get(edge.targetId);
@@ -201,48 +312,62 @@ Focus on extracting the most significant and meaningful information. Quality is 
       continue;
     }
 
-    await db.insert(edges).values({
+    edgeInserts.push({
       userId,
       sourceNodeId,
       targetNodeId,
       edgeType: edge.type,
     });
-
-    edgesCreated++;
+  }
+  
+  // Batch insert all edges with onConflictDoNothing to handle duplicates
+  if (edgeInserts.length > 0) {
+    const result = await db
+      .insert(edges)
+      .values(edgeInserts)
+      .onConflictDoNothing({ target: [edges.sourceNodeId, edges.targetNodeId] })
+      .returning();
+    
+    edgesCreated = result.length;
   }
 
-  // Generate embeddings for nodes
-  const embeddingInputs = nodeInserts.map(
-    (node) => `${node.label}${node.description ? `: ${node.description}` : ""}`,
-  );
+  // Generate embeddings for new nodes
+  if (nodeInserts.length > 0) {
+    const embeddingInputs = nodeInserts.map(
+      (node) =>
+        `${node.label}${node.description ? `: ${node.description}` : ""}`,
+    );
 
-  const embeddings = await generateEmbeddings({
-    model: "jina-embeddings-v3",
-    task: "retrieval.passage",
-    input: embeddingInputs,
-  });
+    const embeddings = await generateEmbeddings({
+      model: "jina-embeddings-v3",
+      task: "retrieval.passage",
+      input: embeddingInputs,
+    });
 
-  if (embeddings.data.length !== nodeInserts.length) {
-    throw new Error("Failed to generate embeddings for all nodes");
-  }
-
-  // Insert embeddings one by one to ensure type safety
-  for (let i = 0; i < nodeInserts.length; i++) {
-    const embedding = embeddings.data[i]?.embedding;
-    if (!embedding) {
-      console.warn(`No embedding generated for node: ${nodeInserts[i]!.label}`);
-      continue;
+    if (embeddings.data.length !== nodeInserts.length) {
+      throw new Error("Failed to generate embeddings for all nodes");
     }
 
-    await db.insert(nodeEmbeddings).values({
-      nodeId: nodeInserts[i]!.id,
-      embedding,
-      modelName: "jina-embeddings-v3",
-    });
+    // Insert embeddings one by one to ensure type safety
+    for (let i = 0; i < nodeInserts.length; i++) {
+      const embedding = embeddings.data[i]?.embedding;
+      if (!embedding) {
+        console.warn(
+          `No embedding generated for node: ${nodeInserts[i]!.label}`,
+        );
+        continue;
+      }
+
+      await db.insert(nodeEmbeddings).values({
+        nodeId: nodeInserts[i]!.id,
+        embedding,
+        modelName: "jina-embeddings-v3",
+      });
+    }
   }
 
-  // Link nodes to the source - ensure source exists
-  if (source && source.id) {
+  // Link new nodes to the source - ensure source exists
+  if (source && source.id && nodeInserts.length > 0) {
     for (const node of nodeInserts) {
       await db.insert(sourceLinks).values({
         nodeId: node.id,
@@ -255,7 +380,8 @@ Focus on extracting the most significant and meaningful information. Quality is 
   return {
     success: true,
     stats: {
-      nodesCreated: nodeInserts.length,
+      existingNodesReused: existingNodes.length,
+      newNodesCreated: nodeInserts.length,
       edgesCreated,
       sourceId: source?.id || "unknown",
     },

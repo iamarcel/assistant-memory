@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 import {
@@ -9,12 +10,12 @@ import {
   sourceLinks,
   users,
 } from "~/db/schema";
-import { useDatabase } from "~/utils/db";
-import { TypeId, typeIdSchema } from "~/types/typeid";
-import { findSimilarNodes } from "~/lib/search";
-import { env } from "~/utils/env";
-import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
 import { generateEmbeddings } from "~/lib/embeddings";
+import { findSimilarNodes } from "~/lib/search";
+import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
+import { TypeId, typeIdSchema } from "~/types/typeid";
+import { useDatabase } from "~/utils/db";
+import { env } from "~/utils/env";
 
 const ingestConversationRequestSchema = z.object({
   userId: typeIdSchema("user"),
@@ -24,21 +25,26 @@ const ingestConversationRequestSchema = z.object({
       z.object({
         content: z.string(),
         role: z.string(),
+        timestamp: z.string().datetime().optional(),
       }),
     ),
   }),
 });
 
+type IngestConversationRequest = z.infer<
+  typeof ingestConversationRequestSchema
+>;
+
 /**
  * Converts conversation messages to an XML-like format for LLM processing
  */
 function formatConversationAsXml(
-  messages: { content: string; role: string }[],
+  messages: IngestConversationRequest["conversation"]["messages"],
 ): string {
   return messages
     .map(
       (message, index) =>
-        `<message id="${index}" role="${message.role}">
+        `<message id="${index}" role="${message.role}" ${message.timestamp ? `timestamp="${message.timestamp}"` : ""}>
       <content>${message.content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</content>
     </message>`,
     )
@@ -89,29 +95,85 @@ export default defineEventHandler(async (event) => {
     })
     .onConflictDoNothing();
 
-  // Store conversation as a source
-  const [source] = await db
-    .insert(sources)
-    .values({
-      userId,
-      sourceType: "conversation",
-      sourceIdentifier: conversation.id,
-    })
-    .returning();
+  // Check if this conversation source already exists
+  const existingSource = await db.query.sources.findFirst({
+    where: (sources, { and, eq }) =>
+      and(
+        eq(sources.userId, userId),
+        eq(sources.sourceType, "conversation"),
+        eq(sources.sourceIdentifier, conversation.id),
+      ),
+  });
+
+  // Filter messages based on lastIngestedAt if the source exists
+  let messagesToProcess = conversation.messages;
+  if (existingSource?.lastIngestedAt) {
+    const lastIngestedDate = new Date(existingSource.lastIngestedAt);
+    messagesToProcess = conversation.messages.filter((message) => {
+      // If message has no timestamp, include it (conservative approach)
+      if (!message.timestamp) return true;
+
+      const messageDate = new Date(message.timestamp);
+      return messageDate > lastIngestedDate;
+    });
+
+    // If no new messages, return early with success
+    if (messagesToProcess.length === 0) {
+      return {
+        success: true,
+        stats: {
+          existingNodesReused: 0,
+          newNodesCreated: 0,
+          edgesCreated: 0,
+          sourceId: existingSource.id,
+          skipped: true,
+          reason: "No new messages since last ingestion",
+        },
+      };
+    }
+  }
+
+  // Store or update conversation as a source
+  const currentTimestamp = new Date();
+  let source;
+
+  if (existingSource) {
+    // Update the existing source with new timestamp
+    [source] = await db
+      .update(sources)
+      .set({
+        lastIngestedAt: currentTimestamp,
+        status: "completed",
+      })
+      .where(eq(sources.id, existingSource.id))
+      .returning();
+  } else {
+    // Create a new source
+    [source] = await db
+      .insert(sources)
+      .values({
+        userId,
+        sourceType: "conversation",
+        sourceIdentifier: conversation.id,
+        lastIngestedAt: currentTimestamp,
+        status: "completed",
+      })
+      .returning();
+  }
 
   if (!source) {
-    throw new Error("Failed to store conversation as source");
+    throw new Error("Failed to store or update conversation as source");
   }
 
   // Format conversation as XML for the LLM
-  const conversationXml = formatConversationAsXml(conversation.messages);
+  const conversationXml = formatConversationAsXml(messagesToProcess);
 
   // Get similar nodes with their metadata in a single query
   const similarNodes = await findSimilarNodes({
     userId,
     text: conversationXml,
     limit: 10,
-    similarityThreshold: 0.7,
+    similarityThreshold: 0.2,
   });
 
   // Create a mapping from real node IDs to temporary IDs for the prompt

@@ -26,7 +26,8 @@ const ingestConversationRequestSchema = z.object({
       z.object({
         content: z.string(),
         role: z.string(),
-        timestamp: z.string().datetime().optional(),
+        name: z.string().optional(),
+        timestamp: z.string().datetime(),
       }),
     ),
   }),
@@ -45,7 +46,7 @@ function formatConversationAsXml(
   return messages
     .map(
       (message, index) =>
-        `<message id="${index}" role="${message.role}" ${message.timestamp ? `timestamp="${message.timestamp}"` : ""}>
+        `<message id="${index}" role="${message.role}" ${message.name ? `name="${message.name}"` : ""} timestamp="${message.timestamp}>
       <content>${message.content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</content>
     </message>`,
     )

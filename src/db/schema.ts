@@ -39,6 +39,8 @@ export const nodes = pgTable(
   ],
 );
 
+export type NodeSelect = typeof nodes.$inferSelect;
+
 export const nodesRelations = relations(nodes, ({ one }) => ({
   user: one(users, {
     fields: [nodes.userId],

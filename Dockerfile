@@ -22,7 +22,7 @@ COPY . /app
 RUN pnpm run build
 
 # --- Final Application Stage ---
-FROM base AS app
+FROM build AS app
 WORKDIR /app
 COPY --from=deps /app/package.json /app/pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --frozen-lockfile

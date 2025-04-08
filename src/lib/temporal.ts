@@ -1,6 +1,6 @@
 import { generateEmbeddings } from "./embeddings";
-import { format, startOfDay, endOfDay } from "date-fns";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { format } from "date-fns";
+import { and, eq } from "drizzle-orm";
 import { type NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "~/db/schema";
 import { nodeEmbeddings, nodeMetadata, nodes } from "~/db/schema";
@@ -12,7 +12,7 @@ type Database = NodePgDatabase<typeof schema>;
 /**
  * Ensures a Temporal node representing the given date exists for the user,
  * creating one if necessary.
- * Finds the node based on the createdAt timestamp falling within the target day.
+ * Finds the node based on the metadata label (YYYY-MM-DD) for robustness.
  *
  * @param db The Drizzle database instance.
  * @param userId The ID of the user.
@@ -26,18 +26,21 @@ export async function ensureDayNode(
   targetDate: Date = new Date(),
 ): Promise<TypeId<"node">> {
   const dateLabel = format(targetDate, "yyyy-MM-dd");
-  const dayStart = startOfDay(targetDate);
-  const dayEnd = endOfDay(targetDate);
 
-  const existingDayNode = await db.query.nodes.findFirst({
-    where: and(
-      eq(nodes.userId, userId),
-      eq(nodes.nodeType, NodeTypeEnum.enum.Temporal),
-      gte(nodes.createdAt, dayStart),
-      lte(nodes.createdAt, dayEnd),
-    ),
-    columns: { id: true },
-  });
+  // --- Find existing day node by LABEL, not just timestamp ---
+  const [existingDayNode] = await db
+    .select({ id: nodes.id })
+    .from(nodes)
+    .innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodes.id))
+    .where(
+      and(
+        eq(nodes.userId, userId),
+        eq(nodes.nodeType, NodeTypeEnum.enum.Temporal),
+        eq(nodeMetadata.label, dateLabel),
+      ),
+    )
+    .limit(1);
+  // --- End Label-based check ---
 
   if (existingDayNode) {
     return existingDayNode.id;

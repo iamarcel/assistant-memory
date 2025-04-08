@@ -78,6 +78,17 @@ export default defineEventHandler(async (event) => {
       ),
     );
 
+  // --- Deduplicate nodes based on ID for the final response ---
+  const uniqueNodesMap = new Map<string, ConnectedNode>();
+  connectedNodes.forEach((node) => {
+    if (!uniqueNodesMap.has(node.id)) {
+      uniqueNodesMap.set(node.id, node);
+    }
+    // If node already exists, we keep the first encountered version.
+    // Modify this logic if a different version (e.g., based on edge type) is preferred.
+  });
+  const uniqueConnectedNodes = Array.from(uniqueNodesMap.values());
+
   type ConnectedNode = (typeof connectedNodes)[number];
 
   // Format the results as a nice string if requested
@@ -85,7 +96,7 @@ export default defineEventHandler(async (event) => {
   if (includeFormattedResult && connectedNodes.length > 0) {
     formattedResult = `# Memories from ${date}\n\n`;
 
-    // Group nodes by edge type
+    // Group nodes by edge type (using the original list with potential duplicates)
     const nodesByEdgeType = connectedNodes.reduce(
       (acc, node) => {
         const type = node.edgeType || "Unknown";
@@ -99,7 +110,19 @@ export default defineEventHandler(async (event) => {
     // Format each group
     for (const [edgeType, nodes] of Object.entries(nodesByEdgeType)) {
       formattedResult += `## ${edgeType}\n\n`;
-      nodes.forEach((node) => {
+      // Deduplicate nodes *within this specific edge type group* for formatting
+      const uniqueNodesInGroup = Array.from(
+        nodes
+          .reduce((map, node) => {
+            if (!map.has(node.id)) {
+              map.set(node.id, node);
+            }
+            return map;
+          }, new Map<string, ConnectedNode>())
+          .values(),
+      );
+
+      uniqueNodesInGroup.forEach((node) => {
         const label = node.metadata?.label || "Unnamed";
         const description = node.metadata?.description || "";
         formattedResult += `- **${label}**: ${description}\n`;
@@ -108,10 +131,32 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return {
+  return dayNodesResponseSchema.parse({
     date,
-    nodeCount: connectedNodes.length,
+    nodeCount: uniqueConnectedNodes.length, // Use count of unique nodes
     ...(includeFormattedResult && formattedResult ? { formattedResult } : {}),
-    nodes: connectedNodes,
-  };
+    nodes: uniqueConnectedNodes, // Return the unique list
+  });
 });
+
+const dayNodesResponseSchema = z.object({
+  date: z.string(),
+  nodeCount: z.number(),
+  formattedResult: z.string().optional(),
+  nodes: z.array(
+    z.object({
+      id: z.string(),
+      nodeType: z.string(),
+      metadata: z.object({
+        label: z.string().optional(),
+        description: z.string().optional(),
+      }),
+      // Note: edgeType here might be less meaningful after deduplication,
+      // as a node might have connected via multiple edge types.
+      // The first encountered edgeType during deduplication is kept.
+      edgeType: z.string().optional(),
+    }),
+  ),
+});
+
+export type DayNodesResponse = z.infer<typeof dayNodesResponseSchema>;

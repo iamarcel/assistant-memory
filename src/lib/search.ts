@@ -7,6 +7,7 @@ import {
   or,
   inArray,
   isNotNull,
+  not,
 } from "drizzle-orm";
 import { nodes, nodeMetadata, nodeEmbeddings, edges } from "~/db/schema";
 import { generateEmbeddings } from "~/lib/embeddings";
@@ -124,7 +125,8 @@ export async function findSimilarNodes({
 }
 
 /**
- * Finds one-hop connections for the given node IDs
+ * Finds one-hop connections for the given node IDs, returning details
+ * only for the connected nodes (not the input nodes themselves).
  */
 export async function findOneHopConnections(
   db: Awaited<ReturnType<typeof import("~/utils/db").useDatabase>>,
@@ -136,37 +138,67 @@ export async function findOneHopConnections(
     return [];
   }
 
-  const whereConditions = [
-    eq(edges.userId, userId),
-    or(
-      inArray(edges.sourceNodeId, nodeIds),
-      inArray(edges.targetNodeId, nodeIds),
-    ),
-  ];
-
-  if (onlyWithLabels) {
-    whereConditions.push(isNotNull(nodeMetadata.label));
-  }
-
-  return db
+  // Subquery to find relevant edges and identify the actual connected node ID
+  // (the one that is NOT in the input nodeIds array)
+  const edgesSubquery = db
     .select({
-      // Edge information
       sourceId: edges.sourceNodeId,
       targetId: edges.targetNodeId,
       edgeType: edges.edgeType,
-      // Target node information
-      nodeId: nodes.id,
+      // Determine the ID of the node on the 'other side' of the edge
+      connectedNodeId: sql<TypeId<"node">>`
+        CASE
+          WHEN ${inArray(edges.sourceNodeId, nodeIds)} THEN ${edges.targetNodeId}
+          ELSE ${edges.sourceNodeId}
+        END
+      `.as("connected_node_id"),
+    })
+    .from(edges)
+    .where(
+      and(
+        eq(edges.userId, userId),
+        // Edge must connect to one of the input nodes
+        or(
+          inArray(edges.sourceNodeId, nodeIds),
+          inArray(edges.targetNodeId, nodeIds),
+        ),
+      ),
+    )
+    .as("connected_edges");
+
+  // Main query: Join the subquery results with node/metadata details
+  // for the CONNECTED node only, ensuring it's not one of the input nodes.
+  const results = await db
+    .selectDistinctOn([nodes.id], {
+      // Use DISTINCT ON to ensure unique connected nodes
+      // Edge info from subquery
+      sourceId: edgesSubquery.sourceId,
+      targetId: edgesSubquery.targetId,
+      edgeType: edgesSubquery.edgeType,
+      // Node info for the CONNECTED node
+      nodeId: nodes.id, // This is the ID of the connected node
       nodeType: nodes.nodeType,
       label: nodeMetadata.label,
       description: nodeMetadata.description,
     })
-    .from(edges)
-    .innerJoin(
-      nodes,
-      or(eq(edges.targetNodeId, nodes.id), eq(edges.sourceNodeId, nodes.id)),
+    .from(edgesSubquery)
+    // Join nodes table ON the connectedNodeId determined in the subquery
+    .innerJoin(nodes, eq(nodes.id, edgesSubquery.connectedNodeId))
+    .innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodes.id))
+    .where(
+      and(
+        // Crucially, ensure the node we joined is NOT one of the original input IDs
+        not(inArray(nodes.id, nodeIds)),
+        // Optional: Filter connected nodes that don't have labels
+        onlyWithLabels ? isNotNull(nodeMetadata.label) : undefined,
+      ),
     )
-    .innerJoin(nodeMetadata, eq(nodes.id, nodeMetadata.nodeId))
-    .where(and(...whereConditions));
+    // Order by node ID for stable DISTINCT ON results (Postgres requirement)
+    .orderBy(nodes.id)
+    .limit(50);
+
+  // The results should now contain unique connected nodes directly from the DB
+  return results;
 }
 
 /**

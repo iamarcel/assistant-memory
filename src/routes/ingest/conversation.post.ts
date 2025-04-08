@@ -177,7 +177,7 @@ export default defineEventHandler(async (event) => {
   const similarNodes = await findSimilarNodes({
     userId,
     text: conversationXml,
-    limit: 10,
+    limit: 50,
     similarityThreshold: 0.2,
   });
 
@@ -229,6 +229,8 @@ Extract the following elements:
 6. Concepts or ideas explored
 7. Media mentioned (books, movies, articles, etc.)
 8. Temporal references (dates, times, periods)
+9. The assistant's emotions and feelings
+10. The assistant's internal insights or discoveries about the user
 
 For each element, create a node with:
 - A unique temporary ID (format: "temp_[type]_[number]", e.g., "temp_person_1")
@@ -240,6 +242,7 @@ ${
   existingNodes.length > 0
     ? `
 IMPORTANT: I've provided some existing nodes that may be relevant to this conversation. If any of these nodes match entities in the conversation, use them instead of creating new nodes. You can reference these existing nodes by their ID in your edges.
+Never create new nodes for a node that already exists.
 `
     : ""
 }
@@ -421,7 +424,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
       await db.insert(nodeEmbeddings).values({
         nodeId: nodeInserts[i]!.id,
         embedding,
-        modelName: "jina-embeddings-v2-base-en",
+        modelName: "jina-embeddings-v3",
       });
     }
   }

@@ -111,10 +111,13 @@ export default defineEventHandler(async (event) => {
   });
 
   // Filter messages based on lastIngestedAt if the source exists
-  let messagesToProcess = conversation.messages;
+  let messagesToProcess = conversation.messages.filter(
+    (m) => m.role !== "tool",
+  );
+
   if (existingSource?.lastIngestedAt) {
     const lastIngestedDate = new Date(existingSource.lastIngestedAt);
-    messagesToProcess = conversation.messages.filter((message) => {
+    messagesToProcess = messagesToProcess.filter((message) => {
       // If message has no timestamp, include it (conservative approach)
       if (!message.timestamp) return true;
 

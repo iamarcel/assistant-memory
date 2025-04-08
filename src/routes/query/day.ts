@@ -3,12 +3,11 @@ import { defineEventHandler } from "h3";
 import { z } from "zod";
 import { edges, nodeMetadata, nodes } from "~/db/schema";
 import { EdgeType, NodeTypeEnum } from "~/types/graph";
-import { typeIdSchema } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
 
 // Define the request schema
 const dayNodesRequestSchema = z.object({
-  userId: typeIdSchema("user"),
+  userId: z.string(),
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),

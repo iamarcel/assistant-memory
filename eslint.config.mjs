@@ -1,8 +1,8 @@
+import js from "@eslint/js";
+import drizzle from "eslint-plugin-drizzle";
 import { defineConfig } from "eslint/config";
 import globals from "globals";
-import js from "@eslint/js";
 import tseslint from "typescript-eslint";
-import drizzle from "eslint-plugin-drizzle";
 
 export default defineConfig([
   { files: ["src/**/*.{js,mjs,cjs,ts}"] },

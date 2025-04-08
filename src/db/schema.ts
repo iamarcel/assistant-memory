@@ -19,14 +19,14 @@ import { EdgeType, NodeType } from "~/types/graph";
 // pgTable('ontology_edge_types', { ... name: string, description: string, allowed_source_types: string[], allowed_target_types: string[] ... });
 
 export const users = pgTable("users", {
-  id: typeId("user").primaryKey().notNull(),
+  id: text().primaryKey().notNull(),
 });
 
 export const nodes = pgTable(
   "nodes",
   {
     id: typeId("node").primaryKey().notNull(),
-    userId: typeId("user")
+    userId: text()
       .references(() => users.id)
       .notNull(),
     nodeType: varchar("node_type", { length: 50 }).notNull().$type<NodeType>(),
@@ -83,7 +83,7 @@ export const edges = pgTable(
   "edges",
   {
     id: typeId("edge").primaryKey().notNull(),
-    userId: typeId("user")
+    userId: text()
       .references(() => users.id)
       .notNull(),
     sourceNodeId: typeId("node")
@@ -164,7 +164,7 @@ export const nodeEmbeddingsRelations = relations(nodeEmbeddings, ({ one }) => ({
 
 export const aliases = pgTable("aliases", {
   id: typeId("alias").primaryKey().notNull(),
-  userId: typeId("user")
+  userId: text()
     .references(() => users.id)
     .notNull(),
   aliasText: text().notNull(), // The alias string (e.g., "I", "MW", "Mom")
@@ -191,7 +191,7 @@ export const aliasesRelations = relations(aliases, ({ one }) => ({
 
 export const sources = pgTable("sources", {
   id: typeId("source").primaryKey().notNull(),
-  userId: typeId("user")
+  userId: text()
     .references(() => users.id)
     .notNull(),
   sourceType: varchar("source_type", { length: 50 }).notNull(), // e.g., 'chat_session', 'notion_page', 'obsidian_note', 'audio_file'
@@ -248,7 +248,7 @@ export const sourceLinksRelations = relations(sourceLinks, ({ one }) => ({
 
 export const userProfiles = pgTable("user_profiles", {
   id: typeId("user_profile").primaryKey().notNull(),
-  userId: typeId("user")
+  userId: text()
     .references(() => users.id)
     .notNull(),
   content: text().notNull(), // The descriptive text

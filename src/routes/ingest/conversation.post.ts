@@ -14,12 +14,12 @@ import { generateEmbeddings } from "~/lib/embeddings";
 import { findSimilarNodes } from "~/lib/search";
 import { ensureDayNode } from "~/lib/temporal";
 import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
-import { TypeId, typeIdSchema } from "~/types/typeid";
+import { TypeId } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
 import { env } from "~/utils/env";
 
 const ingestConversationRequestSchema = z.object({
-  userId: typeIdSchema("user"),
+  userId: z.string(),
   conversation: z.object({
     id: z.string(),
     messages: z.array(
@@ -89,9 +89,6 @@ export default defineEventHandler(async (event) => {
   );
   const db = await useDatabase();
 
-  // --- Ensure Day Node Exists ---
-  const dayNodeId = await ensureDayNode(db, userId);
-
   // Ensure user exists
   await db
     .insert(users)
@@ -99,6 +96,9 @@ export default defineEventHandler(async (event) => {
       id: userId,
     })
     .onConflictDoNothing();
+
+  // --- Ensure Day Node Exists ---
+  const dayNodeId = await ensureDayNode(db, userId);
 
   // Check if this conversation source already exists
   const existingSource = await db.query.sources.findFirst({

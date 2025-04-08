@@ -1,18 +1,35 @@
 import { z } from "zod";
-import { useDatabase } from "~/utils/db";
-import { typeIdSchema } from "~/types/typeid";
 import {
   findSimilarNodes,
   findOneHopConnections,
   processSearchResultsWithConnections,
   formatSearchResultsAsString,
 } from "~/lib/search";
+import { typeIdSchema } from "~/types/typeid";
+import { useDatabase } from "~/utils/db";
 
 // Define the request schema
 const queryRequestSchema = z.object({
-  userId: typeIdSchema("user"),
+  userId: z.string(),
   query: z.string().min(1),
   limit: z.number().int().min(1).max(50).default(10),
+});
+
+const querySearchResponseSchema = z.object({
+  query: z.string(),
+  directMatches: z.number(),
+  connectedNodes: z.number(),
+  formattedResult: z.string(),
+  nodes: z.array(
+    z.object({
+      id: typeIdSchema("node"),
+      type: z.string(),
+      label: z.string(),
+      description: z.string().optional().nullable(),
+      isDirectMatch: z.boolean().optional(),
+      connectedTo: z.array(typeIdSchema("node")).optional(),
+    }),
+  ),
 });
 
 export default defineEventHandler(async (event) => {
@@ -38,23 +55,25 @@ export default defineEventHandler(async (event) => {
     db,
     userId,
     directMatchIds,
-    true // Only include nodes with labels
+    true, // Only include nodes with labels
   );
 
   // Process the results
-  const { directMatches, connectedNodes, allNodes } = processSearchResultsWithConnections(
-    similarNodes,
-    oneHopConnections
-  );
+  const { directMatches, connectedNodes, allNodes } =
+    processSearchResultsWithConnections(similarNodes, oneHopConnections);
 
   // Format the results as a nice string
-  const formattedResult = formatSearchResultsAsString(query, allNodes, directMatches);
+  const formattedResult = formatSearchResultsAsString(
+    query,
+    allNodes,
+    directMatches,
+  );
 
-  return {
+  return querySearchResponseSchema.parse({
     query,
     directMatches: directMatches.length,
     connectedNodes: connectedNodes.length,
     formattedResult,
     nodes: allNodes,
-  };
+  });
 });

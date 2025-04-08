@@ -22,7 +22,7 @@ type Database = NodePgDatabase<typeof schema>;
  */
 export async function ensureDayNode(
   db: Database,
-  userId: TypeId<"user">,
+  userId: string,
   targetDate: Date = new Date(),
 ): Promise<TypeId<"node">> {
   const dateLabel = format(targetDate, "yyyy-MM-dd");

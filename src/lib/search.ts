@@ -40,11 +40,16 @@ export type NodeWithConnections = {
  * Search options for finding similar nodes
  */
 export interface FindSimilarNodesOptions {
-  userId: TypeId<"user">;
+  userId: string;
   text: string;
   limit?: number;
   similarityThreshold?: number;
-  embeddingTask?: "retrieval.query" | "retrieval.passage" | "text-matching" | "classification" | "separation";
+  embeddingTask?:
+    | "retrieval.query"
+    | "retrieval.passage"
+    | "text-matching"
+    | "classification"
+    | "separation";
 }
 
 /**
@@ -52,7 +57,12 @@ export interface FindSimilarNodesOptions {
  */
 export async function generateTextEmbedding(
   text: string,
-  task: "retrieval.query" | "retrieval.passage" | "text-matching" | "classification" | "separation" = "retrieval.passage",
+  task:
+    | "retrieval.query"
+    | "retrieval.passage"
+    | "text-matching"
+    | "classification"
+    | "separation" = "retrieval.passage",
 ) {
   const embeddings = await generateEmbeddings({
     model: "jina-embeddings-v3",
@@ -118,7 +128,7 @@ export async function findSimilarNodes({
  */
 export async function findOneHopConnections(
   db: Awaited<ReturnType<typeof import("~/utils/db").useDatabase>>,
-  userId: TypeId<"user">,
+  userId: string,
   nodeIds: TypeId<"node">[],
   onlyWithLabels = true,
 ) {
@@ -128,7 +138,10 @@ export async function findOneHopConnections(
 
   const whereConditions = [
     eq(edges.userId, userId),
-    or(inArray(edges.sourceNodeId, nodeIds), inArray(edges.targetNodeId, nodeIds)),
+    or(
+      inArray(edges.sourceNodeId, nodeIds),
+      inArray(edges.targetNodeId, nodeIds),
+    ),
   ];
 
   if (onlyWithLabels) {
@@ -196,7 +209,9 @@ export function processSearchResultsWithConnections(
   for (const connection of connections) {
     const isSource = directMatchIds.includes(connection.sourceId);
     const directNodeId = isSource ? connection.sourceId : connection.targetId;
-    const connectedNodeId = isSource ? connection.targetId : connection.sourceId;
+    const connectedNodeId = isSource
+      ? connection.targetId
+      : connection.sourceId;
 
     // Skip if the connected node is already a direct match
     if (directMatchIds.includes(connectedNodeId)) {
@@ -222,10 +237,7 @@ export function processSearchResultsWithConnections(
 
     // Add the direct node to the connected node's connections
     const connectedNode = oneHopNodes.get(connectedNodeId);
-    if (
-      connectedNode &&
-      !connectedNode.connectedTo!.includes(directNodeId)
-    ) {
+    if (connectedNode && !connectedNode.connectedTo!.includes(directNodeId)) {
       connectedNode.connectedTo!.push(directNodeId);
     }
   }

@@ -27,8 +27,8 @@ WORKDIR /app
 COPY --from=deps /app/package.json /app/pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --frozen-lockfile
 COPY --from=build /app/.output ./.output
-RUN mkdir -p ./src/db/migrations # Ensure migrations dir exists before copy
-COPY --from=build /app/src/db/migrations ./src/db/migrations/
+RUN mkdir -p ./drizzle # Ensure migrations dir exists before copy
+COPY --from=build /app/drizzle ./drizzle
 
 ENV PORT=${PORT:-8000}
 EXPOSE ${PORT}

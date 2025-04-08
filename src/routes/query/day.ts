@@ -141,7 +141,7 @@ export default defineEventHandler(async (event) => {
 
 const dayNodesResponseSchema = z.object({
   date: z.string(),
-  nodeCount: z.number(),
+  nodeCount: z.number().optional(),
   formattedResult: z.string().optional(),
   nodes: z.array(
     z.object({

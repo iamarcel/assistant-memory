@@ -250,7 +250,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
 
   const completion = await client.beta.chat.completions.parse({
     messages: [{ role: "user", content: prompt }],
-    model: "gpt-4o-mini",
+    model: env.MODEL_ID_GRAPH_EXTRACTION,
     response_format: zodResponseFormat(
       z.object({
         nodes: z.array(

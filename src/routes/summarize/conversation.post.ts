@@ -42,12 +42,14 @@ export default defineEventHandler(async (event) => {
 
 Return (a) a title and (b) a summary, which is a set of concise, information-dense bullet point lists with important information to remember. Write down:
 
-- Key people mentioned
+- Key people mentioned (outside of the participants)
 - Key events, experiences, or observations
 - The evolution throughout the conversation
 - The user's emotions and feelings
 - The assistant's internal insights or discoveries
 - The assistant's internal decisions, realizations and conclusions for later
+
+Do not include any irrelevant information. Do not mention things like "not explicitly stated"—just omit the point or even the full header altogether.
 
 <conversation>
 ${formatConversationAsXml(conversation.messages)}

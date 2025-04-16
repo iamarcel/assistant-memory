@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
 
 # --- Dependencies Stage ---
 FROM base AS deps
+WORKDIR /app
+
 COPY pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm fetch
 COPY package.json ./
@@ -17,7 +19,8 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 # --- Build Stage ---
 FROM deps AS build
-COPY . /app
+WORKDIR /app
+COPY . .
 
 RUN pnpm run build
 

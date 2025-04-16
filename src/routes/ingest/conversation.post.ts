@@ -11,6 +11,10 @@ import {
   users,
 } from "~/db/schema";
 import { generateEmbeddings } from "~/lib/embeddings";
+import {
+  formatConversationAsXml,
+  formatNodesForPrompt,
+} from "~/lib/formatting";
 import { findSimilarNodes } from "~/lib/search";
 import { ensureDayNode } from "~/lib/temporal";
 import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
@@ -32,56 +36,6 @@ const ingestConversationRequestSchema = z.object({
     ),
   }),
 });
-
-type IngestConversationRequest = z.infer<
-  typeof ingestConversationRequestSchema
->;
-
-/**
- * Converts conversation messages to an XML-like format for LLM processing
- */
-function formatConversationAsXml(
-  messages: IngestConversationRequest["conversation"]["messages"],
-): string {
-  return messages
-    .map(
-      (message, index) =>
-        `<message id="${index}" role="${message.role}" ${message.name ? `name="${message.name}"` : ""} timestamp="${message.timestamp}>
-      <content>${message.content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</content>
-    </message>`,
-    )
-    .join("\n");
-}
-
-/**
- * Formats nodes for inclusion in the LLM prompt
- */
-function formatExistingNodesForPrompt(
-  existingNodes: Array<{
-    id: TypeId<"node">;
-    type: string;
-    label: string;
-    description: string | null;
-    tempId: string;
-  }>,
-): string {
-  if (existingNodes.length === 0) {
-    return "";
-  }
-
-  const nodesJson = existingNodes.map((node) => ({
-    id: node.tempId,
-    type: node.type,
-    label: node.label,
-    description: node.description || "",
-  }));
-
-  return `
-<existing_nodes>
-${JSON.stringify(nodesJson, null, 2)}
-</existing_nodes>
-`;
-}
 
 export default defineEventHandler(async (event) => {
   const { userId, conversation } = ingestConversationRequestSchema.parse(
@@ -221,7 +175,7 @@ IMPORTANT: Do NOT respond to the conversation content. Instead, analyze it and e
 <conversation>
 ${conversationXml}
 </conversation>
-${formatExistingNodesForPrompt(existingNodes)}
+${formatNodesForPrompt(existingNodes)}
 
 Extract the following elements:
 1. People mentioned (real or fictional)

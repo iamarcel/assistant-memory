@@ -1,3 +1,4 @@
+import { parseISO } from "date-fns";
 import { zodResponseFormat } from "openai/helpers/zod.mjs";
 import { z } from "zod";
 import { edges, nodeMetadata, nodes, users } from "~/db/schema";
@@ -9,14 +10,16 @@ const SummarizeConversationRequestSchema = z.object({
   userId: z.string(),
   conversation: z.object({
     id: z.string(),
-    messages: z.array(
-      z.object({
-        content: z.string(),
-        role: z.string(),
-        name: z.string().optional(),
-        timestamp: z.string().datetime(),
-      }),
-    ),
+    messages: z
+      .array(
+        z.object({
+          content: z.string(),
+          role: z.string(),
+          name: z.string().optional(),
+          timestamp: z.string().datetime(),
+        }),
+      )
+      .min(1),
   }),
 });
 
@@ -36,7 +39,10 @@ export default defineEventHandler(async (event) => {
     .onConflictDoNothing();
 
   // --- Ensure Day Node Exists ---
-  const dayNodeId = await ensureDayNode(db, userId);
+  const lastMessageTimestamp = parseISO(
+    conversation.messages[conversation.messages.length - 1]!.timestamp,
+  );
+  const dayNodeId = await ensureDayNode(db, userId, lastMessageTimestamp);
 
   const prompt = `You are a conversation summarizer. Your task is to analyze the following conversation and extract the most important information to create a summary.
 
@@ -86,7 +92,7 @@ ${formatConversationAsXml(conversation.messages)}
     .values({
       userId,
       nodeType: "Conversation",
-      createdAt: new Date(),
+      createdAt: lastMessageTimestamp,
     })
     .returning();
 

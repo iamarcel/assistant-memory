@@ -21,6 +21,7 @@ import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
 import { TypeId } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
 import { env } from "~/utils/env";
+import { parseISO } from "date-fns";
 
 const ingestConversationRequestSchema = z.object({
   userId: z.string(),
@@ -51,8 +52,11 @@ export default defineEventHandler(async (event) => {
     })
     .onConflictDoNothing();
 
-  // --- Ensure Day Node Exists ---
-  const dayNodeId = await ensureDayNode(db, userId);
+  // --- Ensure Day Node Exists (use the timestamp of the *first* message) ---
+  const firstMessageTimestamp = conversation.messages[0]?.timestamp
+    ? parseISO(conversation.messages[0].timestamp)
+    : new Date(); // Fallback to now if no messages or timestamp
+  const dayNodeId = await ensureDayNode(db, userId, firstMessageTimestamp);
 
   // Check if this conversation source already exists
   const existingSource = await db.query.sources.findFirst({
@@ -64,11 +68,11 @@ export default defineEventHandler(async (event) => {
       ),
   });
 
-  // Filter messages based on lastIngestedAt if the source exists
-  let messagesToProcess = conversation.messages.filter(
-    (m) => m.role !== "tool",
-  );
+  // Get all messages from the request
+  const allMessages = conversation.messages.filter((m) => m.role !== "tool");
 
+  // Filter messages for graph processing based on lastIngestedAt if the source exists
+  let messagesToProcess = allMessages;
   if (existingSource?.lastIngestedAt) {
     const lastIngestedDate = new Date(existingSource.lastIngestedAt);
     messagesToProcess = messagesToProcess.filter((message) => {
@@ -89,45 +93,125 @@ export default defineEventHandler(async (event) => {
           edgesCreated: 0,
           sourceId: existingSource.id,
           skipped: true,
-          reason: "No new messages since last ingestion",
+          reason: "No new messages since last ingestion for graph processing",
         },
       };
     }
   }
 
-  // Store or update conversation as a source
+  // Store or update conversation source and handle conversation node
   const currentTimestamp = new Date();
-  let source;
+  let sourceId: TypeId<"source">;
+  let conversationNodeId: TypeId<"node"> | null;
 
   if (existingSource) {
-    // Update the existing source with new timestamp
-    [source] = await db
-      .update(sources)
-      .set({
-        lastIngestedAt: currentTimestamp,
-        status: "completed",
-      })
-      .where(eq(sources.id, existingSource.id))
-      .returning();
+    sourceId = existingSource.id;
+    conversationNodeId = existingSource.conversationNodeId;
+
+    // If somehow the conversationNodeId is null on an existing source, create it now.
+    // This might happen if the source existed before this code change.
+    if (!conversationNodeId) {
+      const [newConversationNode] = await db
+        .insert(nodes)
+        .values({
+          userId,
+          nodeType: NodeTypeEnum.enum.Conversation,
+          createdAt: firstMessageTimestamp, // Use timestamp of the first message
+        })
+        .returning();
+      if (!newConversationNode) throw new Error("Failed to create conversation node");
+      conversationNodeId = newConversationNode.id;
+
+      // Link to day node
+      await db.insert(edges).values({
+        userId,
+        sourceNodeId: dayNodeId,
+        targetNodeId: conversationNodeId,
+        edgeType: EdgeTypeEnum.enum.OCCURRED_ON,
+      }).onConflictDoNothing(); // Avoid errors if edge already exists somehow
+
+      // Update the source record with the new conversation node ID and timestamp
+      await db
+        .update(sources)
+        .set({
+          lastIngestedAt: currentTimestamp,
+          status: "completed",
+          conversationNodeId: conversationNodeId, // Set the node ID
+        })
+        .where(eq(sources.id, sourceId));
+    } else {
+      // Just update the timestamp and status
+      await db
+        .update(sources)
+        .set({
+          lastIngestedAt: currentTimestamp,
+          status: "completed", // Keep as completed until summarized
+        })
+        .where(eq(sources.id, sourceId));
+    }
   } else {
+    // Create a new Conversation node first
+    const [newConversationNode] = await db
+      .insert(nodes)
+      .values({
+        userId,
+        nodeType: NodeTypeEnum.enum.Conversation,
+        createdAt: firstMessageTimestamp, // Use timestamp of the first message
+      })
+      .returning();
+
+    if (!newConversationNode) {
+      throw new Error("Failed to create conversation node");
+    }
+    conversationNodeId = newConversationNode.id;
+
+    // Link to day node
+    await db.insert(edges).values({
+      userId,
+      sourceNodeId: dayNodeId,
+      targetNodeId: conversationNodeId,
+      edgeType: EdgeTypeEnum.enum.OCCURRED_ON,
+    }).onConflictDoNothing();
+
     // Create a new source
-    [source] = await db
+    const [newSource] = await db
       .insert(sources)
       .values({
         userId,
         sourceType: "conversation",
         sourceIdentifier: conversation.id,
         lastIngestedAt: currentTimestamp,
-        status: "completed",
+        status: "completed", // Mark as completed until summarized
+        conversationNodeId: conversationNodeId, // Link the node here
       })
       .returning();
+
+    if (!newSource) {
+      throw new Error("Failed to create conversation source");
+    }
+    sourceId = newSource.id;
   }
 
-  if (!source) {
-    throw new Error("Failed to store or update conversation as source");
+  // Store raw messages as individual source records
+  if (messagesToProcess.length > 0) {
+    const recordInserts = messagesToProcess.map((msg, idx) => ({
+      userId,
+      sourceType: "chat_message",
+      sourceIdentifier: `${conversation.id}:${idx}`,
+      metadata: {
+        content: msg.content,
+        role: msg.role,
+        name: msg.name,
+        timestamp: msg.timestamp,
+      },
+      lastIngestedAt: new Date(),
+      status: "completed",
+      conversationNodeId,
+    }));
+    await db.insert(sources).values(recordInserts).onConflictDoNothing();
   }
 
-  // Format conversation as XML for the LLM
+  // Format conversation text to subgraph
   const conversationXml = formatConversationAsXml(messagesToProcess);
 
   // Get similar nodes with their metadata in a single query
@@ -387,11 +471,11 @@ Focus on extracting the most significant and meaningful information. Quality is 
   }
 
   // Link new nodes to the source - ensure source exists
-  if (source && source.id && nodeInserts.length > 0) {
+  if (sourceId && nodeInserts.length > 0) {
     for (const node of nodeInserts) {
       await db.insert(sourceLinks).values({
         nodeId: node.id,
-        sourceId: source.id,
+        sourceId: sourceId,
       });
     }
   }
@@ -403,7 +487,8 @@ Focus on extracting the most significant and meaningful information. Quality is 
       existingNodesReused: existingNodes.length,
       newNodesCreated: nodeInserts.length,
       edgesCreated,
-      sourceId: source?.id || "unknown",
+      sourceId: sourceId,
+      messagesProcessedForGraph: messagesToProcess.length,
     },
   };
 });

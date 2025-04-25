@@ -189,20 +189,28 @@ export const aliasesRelations = relations(aliases, ({ one }) => ({
 
 // --- Source Tracking & Traceability ---
 
-export const sources = pgTable("sources", {
-  id: typeId("source").primaryKey().notNull(),
-  userId: text()
-    .references(() => users.id)
-    .notNull(),
-  sourceType: varchar("source_type", { length: 50 }).notNull(), // e.g., 'chat_session', 'notion_page', 'obsidian_note', 'audio_file'
-  sourceIdentifier: text().notNull(), // e.g., session ID, page URL/ID, file path
-  metadata: jsonb(), // e.g., Notion page title, chat participants
-  lastIngestedAt: timestamp(),
-  status: varchar("status", { length: 20 }).default("pending"), // e.g., 'pending', 'processing', 'completed', 'failed'
-  createdAt: timestamp().defaultNow().notNull(),
-  // Unique constraint on (userId, sourceType, sourceIdentifier)
-  // Index on (userId, status)
-});
+export const sources = pgTable(
+  "sources",
+  {
+    id: typeId("source").primaryKey().notNull(),
+    userId: text()
+      .references(() => users.id)
+      .notNull(),
+    sourceType: varchar("source_type", { length: 50 }).notNull(), // e.g., 'chat_session', 'notion_page', 'obsidian_note', 'audio_file'
+    sourceIdentifier: text().notNull(), // e.g., session ID, page URL/ID, file path
+    metadata: jsonb(), // e.g., Notion page title, chat participants
+    lastIngestedAt: timestamp(),
+    status: varchar("status", { length: 20 }).default("pending"), // e.g., 'pending', 'processing', 'completed', 'failed', 'summarized'
+    conversationNodeId: typeId("node")
+      .references(() => nodes.id), // Link to the Conversation node holding the summary
+    createdAt: timestamp().defaultNow().notNull(),
+  },
+  (table) => [
+    unique().on(table.userId, table.sourceType, table.sourceIdentifier),
+    index("sources_user_id_idx").on(table.userId),
+    index("sources_status_idx").on(table.status),
+  ],
+);
 
 export type SourcesInsert = typeof sources.$inferInsert;
 

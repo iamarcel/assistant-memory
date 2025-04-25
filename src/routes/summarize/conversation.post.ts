@@ -1,120 +1,140 @@
-import { parseISO } from "date-fns";
 import { zodResponseFormat } from "openai/helpers/zod.mjs";
 import { z } from "zod";
-import { edges, nodeMetadata, nodes, users } from "~/db/schema";
+import { nodeMetadata, sources } from "~/db/schema";
 import { formatConversationAsXml } from "~/lib/formatting";
-import { ensureDayNode } from "~/lib/temporal";
-import { EdgeTypeEnum } from "~/types/graph";
+import { eq, and, isNotNull, ne } from "drizzle-orm";
+import { useDatabase } from "~/utils/db";
+import { env } from "~/utils/env";
 
 const SummarizeConversationRequestSchema = z.object({
   userId: z.string(),
-  conversation: z.object({
-    id: z.string(),
-    messages: z
-      .array(
-        z.object({
-          content: z.string(),
-          role: z.string(),
-          name: z.string().optional(),
-          timestamp: z.string().datetime(),
-        }),
-      )
-      .min(1),
-  }),
 });
 
 export default defineEventHandler(async (event) => {
-  const { userId, conversation } = SummarizeConversationRequestSchema.parse(
+  const { userId } = SummarizeConversationRequestSchema.parse(
     await readBody(event),
   );
 
   const db = await useDatabase();
 
-  // Ensure user exists
-  await db
-    .insert(users)
-    .values({
-      id: userId,
-    })
-    .onConflictDoNothing();
+  const sourcesToSummarize = await db.query.sources.findMany({
+    where: and(
+      eq(sources.userId, userId),
+      eq(sources.sourceType, "conversation"),
+      isNotNull(sources.conversationNodeId),
+      ne(sources.status, 'summarized')
+    ),
+  });
 
-  // --- Ensure Day Node Exists ---
-  const lastMessageTimestamp = parseISO(
-    conversation.messages[conversation.messages.length - 1]!.timestamp,
-  );
-  const dayNodeId = await ensureDayNode(db, userId, lastMessageTimestamp);
+  if (sourcesToSummarize.length === 0) {
+    return { message: "No conversations found to summarize.", summarizedCount: 0 };
+  }
 
-  const prompt = `You are a conversation summarizer. Your task is to analyze the following conversation and extract the most important information to create a summary.
-
-Return (a) a title and (b) a summary, which is a set of concise, information-dense bullet point lists with important information to remember. Write down:
-
-- Key people mentioned (outside of the participants)
-- Key events, experiences, or observations
-- The evolution throughout the conversation
-- The user's emotions and feelings
-- The assistant's internal insights or discoveries
-- The assistant's internal decisions, realizations and conclusions for later
-
-Do not include any irrelevant information. Do not mention things like "not explicitly stated"—just omit the point or even the full header altogether.
-
-<conversation>
-${formatConversationAsXml(conversation.messages)}
-</conversation>
-`;
-
+  let summarizedCount = 0;
   const { OpenAI } = await import("openai");
   const client = new OpenAI({
     apiKey: env.OPENAI_API_KEY,
     baseURL: env.OPENAI_API_BASE_URL,
   });
 
-  const completion = await client.beta.chat.completions.parse({
-    messages: [{ role: "user", content: prompt }],
-    model: env.MODEL_ID_GRAPH_EXTRACTION,
-    response_format: zodResponseFormat(
-      z.object({
-        title: z.string(),
-        summary: z.string(),
-      }),
-      "summary",
-    ),
-  });
+  for (const source of sourcesToSummarize) {
+    if (!source.conversationNodeId) {
+      console.warn(`Source ${source.id} is missing conversationNodeId, skipping.`);
+      continue;
+    }
 
-  const parsed = completion.choices[0]?.message.parsed;
+    // Fetch raw chat_message records for this conversation
+    const rawRecords = await db.query.sources.findMany({
+      where: and(
+        eq(sources.sourceType, "chat_message"),
+        eq(sources.conversationNodeId, source.conversationNodeId!),
+      ),
+    });
+    // Parse, sort by timestamp, and format messages
+    const recordMetadataSchema = z.object({
+      content: z.string(),
+      role: z.string(),
+      name: z.string().optional(),
+      timestamp: z.string(),
+    });
+    const formattedMessages = rawRecords
+      .map((rec) => recordMetadataSchema.parse(rec.metadata))
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .map((md) => ({
+        content: md.content,
+        role: md.role,
+        name: md.name ?? undefined,
+        timestamp: md.timestamp,
+      }));
 
-  if (!parsed) {
-    throw new Error("Failed to parse LLM response");
+    if (formattedMessages.length === 0) {
+      console.warn(`No messages found for source ${source.id}, skipping summary.`);
+      await db.update(sources).set({ status: 'summarized' }).where(eq(sources.id, source.id));
+      continue;
+    }
+
+    const prompt = `You are a conversation summarizer. Your task is to analyze the following conversation and extract the most important information to create a summary.
+
+Return (a) a title and (b) a summary, which is a set of concise, information-dense bullet point lists with important information to remember. Write down:
+
+<conversation>
+${formatConversationAsXml(formattedMessages)}
+</conversation>
+`;
+
+    try {
+      const completion = await client.beta.chat.completions.parse({
+        messages: [{ role: "user", content: prompt }],
+        model: env.MODEL_ID_GRAPH_EXTRACTION,
+        response_format: zodResponseFormat(
+          z.object({
+            title: z.string().max(255),
+            summary: z.string(),
+          }),
+          "summary",
+        ),
+      });
+
+      const parsed = completion.choices[0]?.message.parsed;
+
+      if (!parsed) {
+        console.error(`Failed to parse LLM response for source ${source.id}`);
+        await db.update(sources).set({ status: 'failed' }).where(eq(sources.id, source.id));
+        continue;
+      }
+
+      const metadataInsert = {
+        nodeId: source.conversationNodeId,
+        label: parsed.title,
+        description: parsed.summary,
+      };
+      await db.insert(nodeMetadata)
+        .values(metadataInsert)
+        .onConflictDoUpdate({
+          target: nodeMetadata.nodeId,
+          set: {
+            label: parsed.title,
+            description: parsed.summary,
+          }
+        });
+
+      await db
+        .update(sources)
+        .set({
+          status: 'summarized'
+        })
+        .where(eq(sources.id, source.id));
+
+      summarizedCount++;
+
+    } catch (error) {
+      console.error(`Error summarizing source ${source.id}:`, error);
+      await db
+        .update(sources)
+        .set({ status: 'failed' })
+        .where(eq(sources.id, source.id));
+    }
   }
 
-  // Create summary node
-  const [conversationNode] = await db
-    .insert(nodes)
-    .values({
-      userId,
-      nodeType: "Conversation",
-      createdAt: lastMessageTimestamp,
-    })
-    .returning();
-
-  if (!conversationNode) {
-    throw new Error("Failed to create conversation node");
-  }
-
-  await Promise.all([
-    // Link to day node
-    db.insert(edges).values({
-      userId,
-      sourceNodeId: dayNodeId,
-      targetNodeId: conversationNode.id,
-      edgeType: EdgeTypeEnum.enum.OCCURRED_ON,
-    }),
-    // Store in metadata
-    db.insert(nodeMetadata).values({
-      nodeId: conversationNode.id,
-      label: parsed.title,
-      description: parsed.summary,
-    }),
-  ]);
-
-  return { title: parsed.title, summary: parsed.summary };
+  return { message: `Successfully summarized ${summarizedCount} out of ${sourcesToSummarize.length} conversations.`, summarizedCount };
 });

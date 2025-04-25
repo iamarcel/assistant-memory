@@ -12,6 +12,7 @@ export const ID_TYPE_NAMES = [
   "alias",
   "source_link",
   "user_profile",
+  "message",
 ] as const;
 
 export const ID_TYPE_PREFIXES: Record<(typeof ID_TYPE_NAMES)[number], string> =
@@ -24,6 +25,7 @@ export const ID_TYPE_PREFIXES: Record<(typeof ID_TYPE_NAMES)[number], string> =
     alias: "alias",
     source_link: "sln",
     user_profile: "upf",
+    message: "msg",
   } as const;
 
 export type IdType = (typeof ID_TYPE_NAMES)[number];

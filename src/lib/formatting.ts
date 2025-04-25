@@ -21,8 +21,18 @@ export function formatConversationAsXml(messages: Message[]): string {
     .join("\n");
 }
 
+/** Escape special characters for XML */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 /**
- * Formats nodes for inclusion in the LLM prompt
+ * Converts nodes to XML-like format for LLM prompts
  */
 export function formatNodesForPrompt(
   existingNodes: Array<{
@@ -37,16 +47,38 @@ export function formatNodesForPrompt(
     return "";
   }
 
-  const nodesJson = existingNodes.map((node) => ({
-    id: node.tempId,
-    type: node.type,
-    label: node.label,
-    description: node.description || "",
-  }));
+  const xmlItems = existingNodes
+    .map(
+      (
+        node,
+      ) => `<node id="${escapeXml(node.tempId)}" type="${escapeXml(node.type)}">
+  <label>${escapeXml(node.label)}</label>
+  <description>${node.description || ""}</description>
+</node>`,
+    )
+    .join("\n");
+  return `<nodes>
+${xmlItems}
+</nodes>`;
+}
 
-  return `
-<nodes>
-${JSON.stringify(nodesJson, null, 2)}
-</nodes>
-`;
+/**
+ * Formats a list of label/description pairs as XML
+ */
+export function formatLabelDescList(
+  items: Array<{ label?: string | null; description?: string | null }>,
+): string {
+  if (items.length === 0) {
+    return "";
+  }
+
+  const xmlItems = items
+    .map(
+      (item) => `<item label="${escapeXml(item.label ?? "Unnamed")}"
+>${item.description ?? ""}</item>`,
+    )
+    .join("\n");
+  return `<items>
+${xmlItems}
+</items>`;
 }

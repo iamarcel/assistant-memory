@@ -12,9 +12,7 @@ RUN apt-get update && apt-get install -y \
 FROM base AS deps
 WORKDIR /app
 
-COPY pnpm-lock.yaml ./
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm fetch
-COPY package.json ./
+COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 # --- Build Stage ---
@@ -25,12 +23,11 @@ COPY . .
 RUN pnpm run build
 
 # --- Final Application Stage ---
-FROM build AS app
+FROM base AS app
 WORKDIR /app
-COPY --from=deps /app/package.json /app/pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --frozen-lockfile
 COPY --from=build /app/.output ./.output
-RUN mkdir -p ./drizzle # Ensure migrations dir exists before copy
 COPY --from=build /app/drizzle ./drizzle
 
 ENV PORT=${PORT:-8000}

@@ -19,3 +19,4 @@ node_modules
 /blob-report/
 /playwright/.cache/
 /postgres-data/
+/minio-data/

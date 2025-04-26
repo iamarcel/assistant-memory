@@ -26,7 +26,8 @@ RUN pnpm run build
 FROM base AS app
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --frozen-lockfile
+ENV NODE_ENV=production
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --frozen-lockfile --ignore-scripts
 COPY --from=build /app/.output ./.output
 COPY --from=build /app/drizzle ./drizzle
 

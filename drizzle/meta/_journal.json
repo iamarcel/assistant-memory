@@ -15,6 +15,13 @@
       "when": 1744096583784,
       "tag": "0001_friendly_albert_cleary",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1745698488526,
+      "tag": "0002_wandering_young_avengers",
+      "breakpoints": true
     }
   ]
 }

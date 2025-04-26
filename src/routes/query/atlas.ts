@@ -1,0 +1,45 @@
+import { defineEventHandler } from "h3";
+import { z } from "zod";
+import { getAtlas, getAssistantAtlas } from "~/lib/atlas";
+import { useDatabase } from "~/utils/db";
+
+const atlasRequestSchema = z.object({
+  userId: z.string(),
+  assistantId: z.string(),
+});
+
+export default defineEventHandler(async (event) => {
+  const { userId, assistantId } = atlasRequestSchema.parse(
+    await readBody(event),
+  );
+  const db = await useDatabase();
+
+  const { description: userDesc } = await getAtlas(db, userId);
+  const { description: assistantDesc } = await getAssistantAtlas(
+    db,
+    userId,
+    assistantId,
+  );
+
+  // Combine both atlases into a single string
+  return {
+    atlas: `
+${
+  userDesc
+    ? `
+<context type="User Atlas" about="The User Atlas is the central, persistent repository of structured information *about the user*. It aims to capture factual details, track ongoing projects, long-term goals, upcoming events, and significant themes or interests expressed by the user. Refreshed daily.">
+${userDesc}
+</context>`
+    : ""
+}
+
+${
+  assistantDesc
+    ? `
+<context type="Assistant Atlas" about="The Assistant Atlas is the persistent internal memory specific to *this* assistant instance. It captures the assistant's synthesized understanding of its relationship with the user, its own emergent reflections, recurring interaction patterns, perceived emotional tones in the dialogue, and significant moments from its unique perspective. Refreshed daily.">
+${assistantDesc}
+</context>`
+    : ""
+}`,
+  };
+});

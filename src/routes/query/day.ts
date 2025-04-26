@@ -14,6 +14,10 @@ const dayNodesRequestSchema = z.object({
   includeFormattedResult: z.boolean().default(true),
 });
 
+// TODO Validate to make sure we have one-hop results
+// eg., conversation is linked to the day node
+//      and what's mentioned inside is one hop further
+
 export default defineEventHandler(async (event) => {
   const { userId, date, includeFormattedResult } = dayNodesRequestSchema.parse(
     await readBody(event),

@@ -1,10 +1,11 @@
+import { formatISO } from "date-fns";
 import { TypeId } from "~/types/typeid";
 
 interface Message {
   content: string;
   role: string;
   name?: string | undefined;
-  timestamp: string;
+  timestamp: string | number | Date;
 }
 
 /**
@@ -14,7 +15,7 @@ export function formatConversationAsXml(messages: Message[]): string {
   return messages
     .map(
       (message, index) =>
-        `<message id="${index}" role="${message.role}" ${message.name ? `name="${message.name}"` : ""} timestamp="${message.timestamp}>
+        `<message id="${index}" role="${message.role}" ${message.name ? `name="${message.name}"` : ""} timestamp="${formatISO(message.timestamp)}">
       <content>${message.content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</content>
     </message>`,
     )
@@ -57,6 +58,7 @@ export function formatNodesForPrompt(
 </node>`,
     )
     .join("\n");
+
   return `<nodes>
 ${xmlItems}
 </nodes>`;

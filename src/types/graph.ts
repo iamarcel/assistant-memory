@@ -35,3 +35,12 @@ export const EdgeTypeEnum = z.enum([
 ]);
 
 export type EdgeType = z.infer<typeof EdgeTypeEnum>;
+
+export type SourceType = "conversation" | "conversation_message";
+
+export type SourceStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "summarized";

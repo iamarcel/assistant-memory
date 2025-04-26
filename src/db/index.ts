@@ -12,4 +12,6 @@ const db = drizzle({
   casing: "snake_case",
 });
 
+export type DrizzleDB = typeof db;
+
 export default db;

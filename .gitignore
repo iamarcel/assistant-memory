@@ -8,3 +8,4 @@ dist
 .DS_Store
 
 postgres_data/
+minio-data/

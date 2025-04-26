@@ -1,16 +1,17 @@
 import { defineEventHandler, readBody } from "h3";
 import { z } from "zod";
-import { processAtlas } from "~/lib/processing";
-import { useDatabase } from "~/utils/db";
+import { batchQueue } from "~/lib/queues";
 
-const DreamRequestSchema = z.object({
+const EnqueueSummarizeRequestSchema = z.object({
   userId: z.string(),
 });
 
 export default defineEventHandler(async (event) => {
-  const { userId } = DreamRequestSchema.parse(await readBody(event));
-  const db = await useDatabase();
-  // Run dream phase: update scratchpad
-  const updatedAtlas = await processAtlas(db, userId);
-  return { atlas: updatedAtlas };
+  const { userId } = EnqueueSummarizeRequestSchema.parse(await readBody(event));
+
+  await batchQueue.add("summarize", { userId });
+
+  console.log(`Enqueued 'summarize' job for user: ${userId}`);
+
+  return { message: `Summarization job for user ${userId} enqueued successfully.` };
 });

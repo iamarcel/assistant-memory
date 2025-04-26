@@ -1,7 +1,6 @@
 import { defineEventHandler, readBody } from "h3";
 import { z } from "zod";
-import { assistantDream } from "~/lib/processing";
-import { useDatabase } from "~/utils/db";
+import { batchQueue } from "~/lib/queues";
 
 const AssistantDreamRequestSchema = z.object({
   userId: z.string(),
@@ -12,13 +11,15 @@ const AssistantDreamRequestSchema = z.object({
 export default defineEventHandler(async (event) => {
   const { userId, assistantId, assistantDescription } =
     AssistantDreamRequestSchema.parse(await readBody(event));
-  const db = await useDatabase();
-  // Run assistant-dream phase: update assistant-specific atlas
-  const updatedAtlas = await assistantDream(
-    db,
-    userId,
-    assistantId,
-    assistantDescription,
+
+  const jobData = { userId, assistantId, assistantDescription };
+  await batchQueue.add("dream", jobData);
+
+  console.log(
+    `Enqueued 'dream' job for user ${userId}, assistant ${assistantId}`,
   );
-  return { atlas: updatedAtlas };
+
+  return {
+    message: `Dream job for user ${userId}, assistant ${assistantId} enqueued successfully.`,
+  };
 });

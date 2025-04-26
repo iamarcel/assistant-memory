@@ -9,8 +9,9 @@ import {
   vector,
   index,
   unique,
+  integer,
 } from "drizzle-orm/pg-core";
-import { EdgeType, NodeType } from "~/types/graph";
+import { EdgeType, NodeType, SourceStatus, SourceType } from "~/types/graph";
 
 // --- Core Ontology & Structure ---
 
@@ -69,7 +70,10 @@ export const nodeMetadata = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     // Index on nodeId
   },
-  (table) => [index("node_metadata_node_id_idx").on(table.nodeId)],
+  (table) => [
+    index("node_metadata_node_id_idx").on(table.nodeId),
+    unique().on(table.nodeId),
+  ],
 );
 
 export const nodeMetadataRelations = relations(nodeMetadata, ({ one }) => ({
@@ -196,29 +200,40 @@ export const sources = pgTable(
     userId: text()
       .references(() => users.id)
       .notNull(),
-    sourceType: varchar("source_type", { length: 50 }).notNull(), // e.g., 'chat_session', 'notion_page', 'obsidian_note', 'audio_file'
-    sourceIdentifier: text().notNull(), // e.g., session ID, page URL/ID, file path
+    type: varchar("type", { length: 50 }).notNull().$type<SourceType>(),
+    externalId: text().notNull(),
+    parentSource: typeId("source"),
+
     metadata: jsonb(), // e.g., Notion page title, chat participants
     lastIngestedAt: timestamp(),
-    status: varchar("status", { length: 20 }).default("pending"), // e.g., 'pending', 'processing', 'completed', 'failed', 'summarized'
-    conversationNodeId: typeId("node")
-      .references(() => nodes.id), // Link to the Conversation node holding the summary
+    status: varchar("status", { length: 20 })
+      .default("pending")
+      .$type<SourceStatus>(), // e.g., 'pending', 'processing', 'completed', 'failed', 'summarized'
     createdAt: timestamp().defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+    contentType: varchar("content_type", { length: 100 }),
+    contentLength: integer("content_length"),
   },
   (table) => [
-    unique().on(table.userId, table.sourceType, table.sourceIdentifier),
+    unique().on(table.userId, table.type, table.externalId),
     index("sources_user_id_idx").on(table.userId),
     index("sources_status_idx").on(table.status),
   ],
 );
 
 export type SourcesInsert = typeof sources.$inferInsert;
+export type SourcesSelect = typeof sources.$inferSelect;
 
-export const sourcesRelations = relations(sources, ({ one }) => ({
+export const sourcesRelations = relations(sources, ({ one, many }) => ({
   user: one(users, {
     fields: [sources.userId],
     references: [users.id],
   }),
+  parent: one(sources, {
+    fields: [sources.parentSource],
+    references: [sources.id],
+  }),
+  children: many(sources),
 }));
 
 export const sourceLinks = pgTable(

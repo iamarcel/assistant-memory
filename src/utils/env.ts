@@ -10,7 +10,23 @@ const envSchema = z.object({
 
   JINA_API_KEY: z.string().min(1),
 
+  REDIS_URL: z
+    .string()
+    .url()
+    .min(1)
+    .describe("URL for Redis connection (e.g., redis://localhost:6379)"),
+
   RUN_MIGRATIONS: z.string().default("false"),
+  MINIO_ENDPOINT: z.string().min(1),
+  MINIO_PORT: z.coerce.number().optional(),
+  MINIO_USE_SSL: z.coerce.boolean().default(false),
+  MINIO_ACCESS_KEY: z.string().min(1),
+  MINIO_SECRET_KEY: z.string().min(1),
+  SOURCES_BUCKET: z.string().min(1),
+  DEBUG_LOGS: z.coerce
+    .boolean()
+    .default(false)
+    .describe("Enable debug logging"),
 });
 
 export const env = envSchema.parse(process.env);

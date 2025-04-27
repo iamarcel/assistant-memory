@@ -56,19 +56,12 @@ export interface FindSimilarNodesOptions {
 /**
  * Generates an embedding for the given text
  */
-export async function generateTextEmbedding(
-  text: string,
-  task:
-    | "retrieval.query"
-    | "retrieval.passage"
-    | "text-matching"
-    | "classification"
-    | "separation" = "retrieval.passage",
-) {
+export async function generateTextEmbedding(text: string) {
   const embeddings = await generateEmbeddings({
     model: "jina-embeddings-v3",
-    task,
+    task: "retrieval.query",
     input: [text],
+    truncate: true,
   });
 
   if (!embeddings.data[0]?.embedding) {
@@ -86,10 +79,9 @@ export async function findSimilarNodes({
   text,
   limit = 10,
   similarityThreshold = 0,
-  embeddingTask = "retrieval.passage",
 }: FindSimilarNodesOptions): Promise<NodeSearchResult[]> {
   // Generate embedding for the text
-  const embedding = await generateTextEmbedding(text, embeddingTask);
+  const embedding = await generateTextEmbedding(text);
 
   // Calculate similarity using cosine distance
   const similarity = sql<number>`1 - (${cosineDistance(

@@ -44,7 +44,6 @@ export default defineEventHandler(async (event) => {
     userId,
     text: query,
     limit,
-    embeddingTask: "retrieval.query", // Important: use query embedding, not document
   });
 
   // Get the IDs of the direct matches

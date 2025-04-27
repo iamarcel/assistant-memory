@@ -28,6 +28,7 @@ const BaseFields = {
 const TextModelSchema = z.object({
   model: z.literal("jina-embeddings-v3"),
   input: z.array(z.string()).min(1),
+  truncate: z.boolean().optional().default(true),
   ...BaseFields,
 });
 
@@ -109,6 +110,7 @@ export async function generateEmbeddings<T extends EmbeddingType = "float">(
   });
 
   if (!response.ok) {
+    console.error(await response.text());
     throw new Error(
       `Jina API error: ${response.status} ${response.statusText}`,
     );

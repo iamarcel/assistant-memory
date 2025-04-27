@@ -282,6 +282,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
       model: "jina-embeddings-v3",
       task: "retrieval.passage",
       input: embeddingInputs,
+      truncate: true,
     });
 
     if (embeddings.data.length !== nodeInserts.length) {

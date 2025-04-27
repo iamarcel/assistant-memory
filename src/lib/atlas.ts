@@ -105,6 +105,8 @@ export async function ensureAssistantEntity(
   userId: string,
   assistantId: string,
 ): Promise<TypeId<"node">> {
+  await ensureUser(db, userId);
+
   const [existing] = await db
     .select({ id: nodes.id })
     .from(nodes)

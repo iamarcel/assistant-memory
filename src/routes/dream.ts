@@ -3,7 +3,7 @@ import { z } from "zod";
 import { batchQueue } from "~/lib/queues";
 
 const AssistantDreamRequestSchema = z.object({
-  userId: z.string(),
+  userId: z.string().startsWith("user_"),
   assistantId: z.string(),
   assistantDescription: z.string(),
 });

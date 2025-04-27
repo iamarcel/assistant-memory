@@ -1,21 +1,20 @@
+import { ensureUser } from "./ingestion/ensure-user";
 import { and, eq } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import * as schema from "~/db/schema";
+import { DrizzleDB } from "~/db";
 import { nodes, nodeMetadata, edges } from "~/db/schema";
 import { NodeTypeEnum, EdgeTypeEnum } from "~/types/graph";
 import { type TypeId } from "~/types/typeid";
-
-// Database instance type
-type Database = NodePgDatabase<typeof schema>;
 
 /**
  * Ensures a single Atlas node (and its metadata) exists for the user.
  * Returns the node ID.
  */
 export async function ensureAtlasNode(
-  db: Database,
+  db: DrizzleDB,
   userId: string,
 ): Promise<TypeId<"node">> {
+  await ensureUser(db, userId);
+
   // Check for existing atlas node
   const [existing] = await db
     .select({ id: nodes.id })
@@ -60,7 +59,7 @@ export async function ensureAtlasNode(
  * Ensures the atlas node exists.
  */
 export async function getAtlas(
-  db: Database,
+  db: DrizzleDB,
   userId: string,
 ): Promise<{
   nodeId: TypeId<"node">;
@@ -88,7 +87,7 @@ export async function getAtlas(
  * Updates the atlas metadata for the user with new description.
  */
 export async function updateAtlas(
-  db: Database,
+  db: DrizzleDB,
   userId: string,
   newDescription: string,
 ): Promise<void> {
@@ -102,7 +101,7 @@ export async function updateAtlas(
 // Assistant-specific atlas utilities
 /** Ensures a Person node for the assistant exists (label=assistantId) */
 export async function ensureAssistantEntity(
-  db: Database,
+  db: DrizzleDB,
   userId: string,
   assistantId: string,
 ): Promise<TypeId<"node">> {
@@ -133,7 +132,7 @@ export async function ensureAssistantEntity(
 
 /** Ensures an assistant-specific Atlas node (label=assistantId) exists and links it */
 export async function ensureAssistantAtlasNode(
-  db: Database,
+  db: DrizzleDB,
   userId: string,
   assistantId: string,
 ): Promise<TypeId<"node">> {
@@ -160,20 +159,18 @@ export async function ensureAssistantAtlasNode(
   await db
     .insert(nodeMetadata)
     .values({ nodeId: atlasNodeId, label: assistantId, description: "" });
-  await db
-    .insert(edges)
-    .values({
-      userId,
-      sourceNodeId: atlasNodeId,
-      targetNodeId: assistantNodeId,
-      edgeType: EdgeTypeEnum.enum.OWNED_BY,
-    });
+  await db.insert(edges).values({
+    userId,
+    sourceNodeId: atlasNodeId,
+    targetNodeId: assistantNodeId,
+    edgeType: EdgeTypeEnum.enum.OWNED_BY,
+  });
   return atlasNodeId;
 }
 
 /** Fetches the assistant-specific atlas metadata */
 export async function getAssistantAtlas(
-  db: Database,
+  db: DrizzleDB,
   userId: string,
   assistantId: string,
 ): Promise<{
@@ -199,7 +196,7 @@ export async function getAssistantAtlas(
 
 /** Updates the assistant-specific atlas metadata */
 export async function updateAssistantAtlas(
-  db: Database,
+  db: DrizzleDB,
   userId: string,
   assistantId: string,
   newDescription: string,

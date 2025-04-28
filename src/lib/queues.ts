@@ -64,13 +64,12 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           `Summarized ${summaryResult.summarizedCount} conversations for user ${userId} in dream job.`,
         );
         // 2. Run both Atlas updates in parallel
-        const [, assistantAtlas] = await Promise.all([
+        await Promise.all([
           processAtlasJob(db, userId),
           assistantDreamJob(db, userId, assistantId, assistantDescription),
         ]);
         console.log(
-          `\n\nAssistant dream completed for user ${userId}, assistant ${assistantId}:`,
-          assistantAtlas,
+          `\n\nAssistant dream completed for user ${userId}, assistant ${assistantId}.`,
         );
       } else if (job.name === "ingest-conversation") {
         const { userId, conversationId, messages } =

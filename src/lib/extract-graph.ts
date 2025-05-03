@@ -53,11 +53,8 @@ export async function extractGraph({
     processedNodeIds.add(node.id);
   }
 
-  const { OpenAI } = await import("openai");
-  const client = new OpenAI({
-    apiKey: env.OPENAI_API_KEY,
-    baseURL: env.OPENAI_API_BASE_URL,
-  });
+  const { createCompletionClient } = await import("./ai");
+  const client = await createCompletionClient(userId);
 
   // Design prompt for the LLM
   const prompt = `You are a knowledge graph extraction expert. Your task is to analyze the following ${sourceType} and extract entities, concepts, events, and their relationships to create a knowledge graph.

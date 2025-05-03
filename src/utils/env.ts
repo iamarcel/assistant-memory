@@ -10,6 +10,8 @@ const envSchema = z.object({
 
   JINA_API_KEY: z.string().min(1),
 
+  HELICONE_API_KEY: z.string().min(1).optional(),
+
   REDIS_URL: z
     .string()
     .url()

@@ -55,11 +55,8 @@ Return only the updated atlas content.
 `;
 
   // 4. Call LLM
-  const { OpenAI } = await import("openai");
-  const client = new OpenAI({
-    apiKey: env.OPENAI_API_KEY,
-    baseURL: env.OPENAI_API_BASE_URL,
-  });
+  const { createCompletionClient } = await import("../ai");
+  const client = await createCompletionClient(userId);
   const completion = await client.chat.completions.create({
     model: env.MODEL_ID_GRAPH_EXTRACTION,
     messages: [{ role: "user", content: prompt }],

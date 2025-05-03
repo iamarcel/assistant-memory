@@ -54,11 +54,8 @@ export async function summarizeUserConversations(
   }
 
   let summarizedCount = 0;
-  const { OpenAI } = await import("openai");
-  const client = new OpenAI({
-    apiKey: env.OPENAI_API_KEY,
-    baseURL: env.OPENAI_API_BASE_URL,
-  });
+  const { createCompletionClient } = await import("../ai");
+  const client = await createCompletionClient(userId);
 
   for (const { sourceId, conversationNodeId } of convsToSummarize) {
     // load conversation turns

@@ -1,7 +1,6 @@
 import { subDays } from "date-fns";
 import { and, eq, or, ne } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import * as schema from "~/db/schema";
+import { DrizzleDB } from "~/db";
 import { nodes, edges, nodeMetadata } from "~/db/schema";
 import {
   getAtlas,
@@ -14,16 +13,13 @@ import { ensureDayNode } from "~/lib/temporal";
 import { NodeTypeEnum } from "~/types/graph";
 import { env } from "~/utils/env";
 
-// Database instance type
-type Database = NodePgDatabase<typeof schema>;
-
 /**
  * Processes the User Atlas, which is a permanent description of information about
  * the user and current important information. This uses the previous day's nodes
  * to make any necessary updates to the User Atlas.
  */
 export async function processAtlas(
-  db: Database,
+  db: DrizzleDB,
   userId: string,
 ): Promise<string> {
   // Determine yesterday's date
@@ -82,11 +78,8 @@ ${memoriesList}
 Please rewrite the atlas to add important information, remove redundant or irrelevant details, and update your current state of mind. Return only the updated atlas content.`;
 
   // Call LLM
-  const { OpenAI } = await import("openai");
-  const client = new OpenAI({
-    apiKey: env.OPENAI_API_KEY,
-    baseURL: env.OPENAI_API_BASE_URL,
-  });
+  const { createCompletionClient } = await import("./ai");
+  const client = await createCompletionClient(userId);
   const completion = await client.chat.completions.create({
     model: env.MODEL_ID_GRAPH_EXTRACTION,
     messages: [{ role: "user", content: prompt }],
@@ -108,7 +101,7 @@ Please rewrite the atlas to add important information, remove redundant or irrel
  * prompts the LLM with the assistant persona, and updates the assistant-specific atlas.
  */
 export async function assistantDream(
-  db: Database,
+  db: DrizzleDB,
   userId: string,
   assistantId: string,
   assistantDescription: string,
@@ -169,11 +162,8 @@ ${convList}
 Please reflect on these conversations: articulate your thoughts, longer-term mood and plans. Return only the updated atlas content.`;
 
   // Call LLM
-  const { OpenAI } = await import("openai");
-  const client = new OpenAI({
-    apiKey: env.OPENAI_API_KEY,
-    baseURL: env.OPENAI_API_BASE_URL,
-  });
+  const { createCompletionClient } = await import("./ai");
+  const client = await createCompletionClient(userId);
   const completion = await client.chat.completions.create({
     model: env.MODEL_ID_GRAPH_EXTRACTION,
     messages: [

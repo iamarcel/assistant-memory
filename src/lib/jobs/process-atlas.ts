@@ -38,7 +38,7 @@ The User Atlas is the central, persistent repository of structured information *
 Based on the provided summaries or raw inputs from the past day and the current User Atlas state, perform the following:
 1.  **Identify Key User Information:** Extract factual statements, updates on projects or goals, newly expressed preferences, mentioned future plans, or significant life events from the day's inputs.
 2.  **Integrate Factual Data:** Add new, stable factual information (e.g., mentioning a specific skill, a new important person in their life, a core value stated).
-3.  **Update Ongoing Initiatives:** Reflect progress, changes, or newly defined aspects of projects, goals, or upcoming events that the user discussed. Note completions or shifts in priority if mentioned.
+3.  **Update Ongoing Initiatives:** Reflect progress, changes, or newly defined aspects of projects, goals, or upcoming events that the user discussed. Note completions or shifts in priority if mentioned. Write down the dates when things are added, so you can keep track of when it's "expired" and no longer relevant.
 4.  **Capture Preferences & Interests:** Record newly stated preferences (e.g., "I prefer X over Y") or recurring topics of deep interest.
 5.  **Synthesize & Structure:** Consolidate related information. Integrate new points into the existing structure logically. Avoid simple lists of dialogue; focus on the underlying information.
 6.  **Preservation Rule:** Core biographical data and explicitly stated, stable preferences should generally be preserved. Only update or remove these if the user provides explicit, contradictory information or declares a change. For ongoing projects or transient states, update based on the latest information.

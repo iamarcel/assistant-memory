@@ -51,6 +51,8 @@ Based on the provided conversation summaries from the past day and the current A
 5.  **Removal/Archiving Rule:** **Do not remove core synthesized knowledge about the established dynamic or the assistant's persona.** Only consider removing or archiving entries that represent clearly transient states (e.g., a momentary confusion that was resolved) or reflections that have been explicitly and demonstrably superseded by significant later interactions. Prioritize preservation and evolution over deletion.
 6.  **Maintain Structure & Conciseness:** Update the Atlas maintaining its existing structure. Focus on impactful, concise statements. Avoid excessive verbosity or simple repetition of conversation content. The output should be the *updated* Assistant Atlas.
 
+You can do this processing every night, so write down the dates when you add or update things—this way you can properly eg., remove things that are no longer relevant.
+
 **Current Assistant Atlas State:**
 ${currentAtlas}
 

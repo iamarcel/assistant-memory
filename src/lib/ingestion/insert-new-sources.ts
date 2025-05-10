@@ -10,6 +10,7 @@ export interface SourceInput {
   content?: string;
   fileBuffer?: Buffer;
   contentType?: string;
+  metadata?: SourceCreateInput['metadata'];
 }
 
 export async function insertNewSources(params: {
@@ -40,7 +41,7 @@ export async function insertNewSources(params: {
     })
     .onConflictDoUpdate({
       set: { lastIngestedAt: new Date() },
-      target: [sources.type, sources.externalId],
+      target: [sources.userId, sources.type, sources.externalId],
     })
     .returning();
 
@@ -57,6 +58,7 @@ export async function insertNewSources(params: {
       parentId: parentSource.id,
       timestamp: cs.timestamp,
     };
+    if (cs.metadata !== undefined) input.metadata = cs.metadata;
     if (cs.content !== undefined) input.content = cs.content;
     if (cs.fileBuffer !== undefined) input.fileBuffer = cs.fileBuffer;
     if (cs.contentType !== undefined) input.contentType = cs.contentType;
@@ -64,11 +66,17 @@ export async function insertNewSources(params: {
   });
 
   // Delegate insertion & storage
-  const { successes: newSourceSourceIds, failures } =
+  const { successes: newInternalIds, failures } =
     await sourceService.insertMany(childInputs);
   if (failures.length) {
     console.warn("Some sources failed to archive:", failures);
   }
+
+  // Fetch external IDs for inserted sources
+  const insertedRows = await db.query.sources.findMany({
+    where: (src, { inArray }) => inArray(src.id, newInternalIds),
+  });
+  const newSourceSourceIds = insertedRows.map((r) => r.externalId);
 
   return { sourceNodeId: parentSource.id, newSourceSourceIds };
 }

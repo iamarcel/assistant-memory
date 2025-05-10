@@ -1,16 +1,13 @@
 import { extractGraph } from "../extract-graph";
 import { formatConversationAsXml } from "../formatting";
 import { ensureUser } from "../ingestion/ensure-user";
+import { insertNewSources } from "../ingestion/insert-new-sources";
 import { ensureDayNode } from "../temporal";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
 import { edges, nodes, NodeSelect, sourceLinks, sources } from "~/db/schema";
-import {
-  saveConversationTurns,
-  type SaveConversationTurnsResult,
-  type ConversationTurn,
-} from "~/lib/conversation-store";
+import { type ConversationTurn } from "~/lib/conversation-store";
 import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
 import { TypeId } from "~/types/typeid";
 
@@ -96,41 +93,33 @@ async function initializeConversation(
   insertedTurns: ConversationTurn[];
 }> {
   await ensureUser(db, userId);
-  const [conversationSource] = await db
-    .insert(sources)
-    .values({
-      userId,
-      type: "conversation",
-      externalId: conversationId,
-      lastIngestedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      set: { lastIngestedAt: new Date() },
-      target: [sources.userId, sources.type, sources.externalId],
-    })
-    .returning();
-
-  if (!conversationSource) {
-    throw new Error(
-      `Conversation source with external id "${conversationId}" not found`,
-    );
-  }
-  const sourceNodeId = conversationSource.id;
-  const turns: ConversationTurn[] = messages.map((m) => ({
-    id: m.id,
-    role: m.role,
-    content: m.content,
-    name: m.name === undefined ? undefined : m.name,
-    timestamp: m.timestamp,
-  }));
-  const result: SaveConversationTurnsResult = await saveConversationTurns(
+  const { sourceNodeId, newSourceSourceIds } = await insertNewSources({
     db,
     userId,
-    sourceNodeId,
-    turns,
-  );
-  const insertedIds = result.successes.map((s) => s.externalId);
-  const insertedTurns = turns.filter((t) => insertedIds.includes(t.id));
+    parentSourceType: "conversation",
+    parentSourceId: conversationId,
+    childSourceType: "conversation_message",
+    childSources: messages.map((m) => ({
+      externalId: m.id,
+      timestamp: m.timestamp,
+      content: m.content,
+      metadata: {
+        rawContent: m.content,
+        role: m.role,
+        name: m.name,
+        timestamp: m.timestamp.toISOString(),
+      },
+    })),
+  });
+  const insertedTurns = messages
+    .filter((m) => newSourceSourceIds.includes(m.id))
+    .map((m) => ({
+      id: m.id,
+      content: m.content,
+      role: m.role,
+      name: m.name,
+      timestamp: m.timestamp,
+    }));
   return { sourceNodeId, insertedTurns };
 }
 

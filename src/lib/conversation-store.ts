@@ -1,7 +1,5 @@
-import { formatISO } from "date-fns";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
-import { sources } from "~/db/schema";
 import { TypeId } from "~/types/typeid";
 
 // Schema to parse stored metadata for conversation messages
@@ -33,44 +31,6 @@ export interface SaveConversationTurnsResult {
     /** External message id */
     externalId: string;
   }>;
-}
-
-/**
- * Persist only new conversation message sources.
- * Each ConversationTurn.id is used as external id.
- * On conflict (existing message), does nothing.
- * @param db DrizzleDB instance
- * @param userId ID of the user owning the conversation
- * @param parentSourceId Internal PK of the parent conversation source
- * @param turns Array of ConversationTurn with external IDs
- * @returns SaveConversationTurnsResult with `successes`: newly inserted rows
- */
-export async function saveConversationTurns(
-  db: DrizzleDB,
-  userId: string,
-  parentSourceId: TypeId<"source">,
-  turns: ConversationTurn[],
-): Promise<SaveConversationTurnsResult> {
-  const rowsToInsert = turns.map((t) => ({
-    userId,
-    type: "conversation_message" as const,
-    externalId: t.id,
-    parentSource: parentSourceId,
-    lastIngestedAt: t.timestamp,
-    content: t.content,
-    metadata: {
-      rawContent: t.content,
-      role: t.role,
-      name: t.name,
-      timestamp: formatISO(t.timestamp),
-    },
-  }));
-  const inserted = await db
-    .insert(sources)
-    .values(rowsToInsert)
-    .onConflictDoNothing()
-    .returning({ internalId: sources.id, externalId: sources.externalId });
-  return { successes: inserted };
 }
 
 /**

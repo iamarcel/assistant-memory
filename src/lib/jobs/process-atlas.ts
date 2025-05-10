@@ -38,7 +38,7 @@ The User Atlas is the central, persistent repository of structured information *
 Based on the provided summaries or raw inputs from the past day and the current User Atlas state, perform the following:
 1.  **Identify Key User Information:** Extract factual statements, updates on projects or goals, newly expressed preferences, mentioned future plans, or significant life events from the day's inputs.
 2.  **Integrate Factual Data:** Add new, stable factual information (e.g., mentioning a specific skill, a new important person in their life, a core value stated).
-3.  **Update Ongoing Initiatives:** Reflect progress, changes, or newly defined aspects of projects, goals, or upcoming events that the user discussed. Note completions or shifts in priority if mentioned. Write down the dates when things are added, so you can keep track of when it's "expired" and no longer relevant.
+3.  **Update Ongoing Initiatives:** Reflect progress, changes, or newly defined aspects of projects, goals, or upcoming events that the user discussed. Note completions or shifts in priority if mentioned. Timestamp when you learn new information, or tasks, or events—this way you can "expire" them and remove them when they are no longer top-of-mind.
 4.  **Capture Preferences & Interests:** Record newly stated preferences (e.g., "I prefer X over Y") or recurring topics of deep interest.
 5.  **Synthesize & Structure:** Consolidate related information. Integrate new points into the existing structure logically. Avoid simple lists of dialogue; focus on the underlying information.
 6.  **Preservation Rule:** Core biographical data and explicitly stated, stable preferences should generally be preserved. Only update or remove these if the user provides explicit, contradictory information or declares a change. For ongoing projects or transient states, update based on the latest information.
@@ -49,9 +49,9 @@ ${currentAtlas ? "The atlas currently contains:\n" + currentAtlas : "The atlas i
 Yesterday's conversation summaries:
 ${convList}
 
-Please rewrite the atlas to add important information, remove redundant or irrelevant details, and update your current state of mind.
+Please rewrite the atlas to add important information, remove redundant, out-of-date or irrelevant details, and update your current state of mind.
 Do not repeat the conversation list in the atlas.
-Return only the updated atlas content.
+Return only the updated atlas content as a neat Markdown file.
 `;
 
   // 4. Call LLM

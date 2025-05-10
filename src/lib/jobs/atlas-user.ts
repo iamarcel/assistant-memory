@@ -1,6 +1,6 @@
-import { fetchDailyConversationsList } from "./atlas-utils";
 import { format } from "date-fns/format";
 import { DrizzleDB } from "~/db";
+import { fetchDailyConversationsList } from "~/lib/analysis/conversations";
 import { getAtlas, updateAtlas } from "~/lib/atlas";
 import { debug } from "~/lib/debug-utils";
 import { env } from "~/utils/env";

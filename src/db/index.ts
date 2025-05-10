@@ -1,6 +1,6 @@
 import * as schema from "./schema";
 import "dotenv/config";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
 import { env } from "~/utils/env";
 
 const db = drizzle({
@@ -12,6 +12,6 @@ const db = drizzle({
   casing: "snake_case",
 });
 
-export type DrizzleDB = typeof db;
+export type DrizzleDB = NodePgDatabase<typeof schema>;
 
 export default db;

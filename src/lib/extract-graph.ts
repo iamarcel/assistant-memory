@@ -1,10 +1,11 @@
 import { debug, debugGraph } from "./debug-utils";
-import { generateEmbeddings } from "./embeddings";
+import { generateAndInsertNodeEmbeddings } from "./embeddings-util";
 import { formatNodesForPrompt } from "./formatting";
 import { findSimilarNodes } from "./search";
+import { TemporaryIdMapper } from "./temporary-id-mapper";
 import { zodResponseFormat } from "openai/helpers/zod.mjs";
 import { z } from "zod";
-import { edges, nodeEmbeddings, nodeMetadata, nodes } from "~/db/schema";
+import { edges, nodeMetadata, nodes } from "~/db/schema";
 import { EdgeTypeEnum, NodeTypeEnum, SourceType } from "~/types/graph";
 import { TypeId } from "~/types/typeid";
 
@@ -31,27 +32,15 @@ export async function extractGraph({
     similarityThreshold: 0.2,
   });
 
-  // Create a mapping from real node IDs to temporary IDs for the prompt
-  const existingNodes = similarNodes.map((node, index) => ({
-    id: node.id,
-    type: node.type,
-    label: node.label ?? "",
-    description: node.description,
-    tempId: `existing_${node.type.toLowerCase()}_${index + 1}`,
-  }));
-
-  // Create a mapping from temporary IDs to real node IDs
-  const existingIdMap = new Map<string, TypeId<"node">>();
-  for (const node of existingNodes) {
-    existingIdMap.set(node.tempId, node.id);
-  }
-
-  // Also create a mapping to track which real nodes we've already processed
-  // so we don't fetch their metadata again
-  const processedNodeIds = new Set<TypeId<"node">>();
-  for (const node of existingNodes) {
-    processedNodeIds.add(node.id);
-  }
+  // Assign temporary IDs to similar nodes using TemporaryIdMapper
+  const existingNodeMapper = new TemporaryIdMapper<
+    (typeof similarNodes)[0],
+    string
+  >((item, index) => `existing_${item.type.toLowerCase()}_${index + 1}`);
+  const existingNodes = existingNodeMapper.mapItems(similarNodes);
+  const existingIdMap = new Map<string, TypeId<"node">>(
+    existingNodeMapper.entries().map(({ id, item }) => [id, item.id]),
+  );
 
   const { createCompletionClient } = await import("./ai");
   const client = await createCompletionClient(userId);
@@ -252,7 +241,8 @@ Focus on extracting the most significant and meaningful information. Quality is 
   const debugNodes = [
     ...existingNodes.map((n) => ({
       id: n.id,
-      label: n.label,
+      // ensure label is string
+      label: n.label ?? "",
       description: n.description ?? undefined,
       nodeType: n.type,
     })),
@@ -270,39 +260,7 @@ Focus on extracting the most significant and meaningful information. Quality is 
   );
 
   // Generate embeddings for new nodes
-  if (nodeInserts.length > 0) {
-    const embeddingInputs = nodeInserts.map(
-      (n) => `${n.label}: ${n.description}`,
-    );
-
-    const embeddings = await generateEmbeddings({
-      model: "jina-embeddings-v3",
-      task: "retrieval.passage",
-      input: embeddingInputs,
-      truncate: true,
-    });
-
-    if (embeddings.data.length !== nodeInserts.length) {
-      throw new Error("Failed to generate embeddings for all nodes");
-    }
-
-    // Insert embeddings one by one to ensure type safety
-    for (let i = 0; i < nodeInserts.length; i++) {
-      const embedding = embeddings.data[i]?.embedding;
-      if (!embedding) {
-        console.warn(
-          `No embedding generated for node: ${nodeInserts[i]!.label}`,
-        );
-        continue;
-      }
-
-      await db.insert(nodeEmbeddings).values({
-        nodeId: nodeInserts[i]!.id,
-        embedding,
-        modelName: "jina-embeddings-v3",
-      });
-    }
-  }
+  await generateAndInsertNodeEmbeddings(db, nodeInserts);
 
   return {
     newNodesCreated: nodeInserts.length,

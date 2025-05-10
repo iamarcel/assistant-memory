@@ -1,8 +1,9 @@
-import { assistantDreamJob } from "./jobs/assistant-dream";
+import { assistantDreamJob } from "./jobs/atlas-assistant";
+import { processAtlasJob } from "./jobs/atlas-user";
+import { CleanupGraphJobInputSchema } from "./jobs/cleanup-graph";
 import { IngestConversationJobInputSchema } from "./jobs/ingest-conversation";
-import { processAtlasJob } from "./jobs/process-atlas";
 import { summarizeUserConversations } from "./jobs/summarize-conversation";
-import { Queue, Worker } from "bullmq";
+import { FlowProducer, Queue, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { useDatabase } from "~/utils/db";
 import { env } from "~/utils/env";
@@ -19,12 +20,14 @@ connection.on("error", (err) => {
 // Create the main batch processing queue
 export const batchQueue = new Queue("batchProcessing", { connection });
 
+export const flowProducer = new FlowProducer({ connection });
+
 // Define Job Data Schemas (using Zod could be an option here too)
 interface SummarizeJobData {
   userId: string;
 }
 
-interface DreamJobData {
+export interface DreamJobData {
   userId: string;
   assistantId: string;
   assistantDescription: string;
@@ -48,10 +51,6 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
         console.log(
           `Summarized ${summaryResult.summarizedCount} conversations for user ${userId}.`,
         );
-
-        // 2. Process User Atlas
-        await processAtlasJob(db, userId);
-        console.log(`Processed user atlas for user ${userId}.`);
       } else if (job.name === "dream") {
         const { userId, assistantId, assistantDescription } =
           job.data as DreamJobData;
@@ -90,6 +89,21 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
         console.log(
           `Ingested conversation ${conversationId} for user ${userId}.`,
         );
+      } else if (job.name === "cleanup-graph") {
+        const data = CleanupGraphJobInputSchema.parse({
+          ...job.data,
+          llmModelId: env.MODEL_ID_GRAPH_EXTRACTION,
+        });
+        console.log(
+          `Starting cleanup-graph job for user ${data.userId}, since ${data.since.toISOString()}`,
+        );
+
+        const { cleanupGraph } = await import("./jobs/cleanup-graph");
+        await cleanupGraph({
+          ...data,
+          llmModelId: env.MODEL_ID_GRAPH_EXTRACTION,
+        });
+        console.log(`Cleanup-graph completed for user ${data.userId}.`);
       } else {
         console.warn(`Unknown job type: ${job.name}`);
         throw new Error(`Unknown job type: ${job.name}`);

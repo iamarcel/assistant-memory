@@ -52,6 +52,7 @@ export async function ensureDayNode(
   const embeddingsResult = await generateEmbeddings({
     input: [embeddingContent],
     model: "jina-embeddings-v3",
+    truncate: true,
   });
 
   if (

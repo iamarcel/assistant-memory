@@ -39,8 +39,8 @@ export function formatNodesForPrompt(
   existingNodes: Array<{
     id: TypeId<"node">;
     type: string;
-    label: string;
-    description: string | null;
+    label: string | null;
+    description?: string | null;
     tempId: string;
   }>,
 ): string {
@@ -49,11 +49,9 @@ export function formatNodesForPrompt(
   }
 
   const xmlItems = existingNodes
-    .map(
-      (
-        node,
-      ) => `<node id="${escapeXml(node.tempId)}" type="${escapeXml(node.type)}">
-  <label>${escapeXml(node.label)}</label>
+    .map((node) =>
+      `<node id="${escapeXml(node.tempId)}" type="${escapeXml(node.type)}">
+  <label>${escapeXml(node.label ?? "")}</label>
   <description>${node.description || ""}</description>
 </node>`,
     )

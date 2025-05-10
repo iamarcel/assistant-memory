@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm";
 import { nodes, nodeMetadata, nodeEmbeddings, edges } from "~/db/schema";
 import { generateEmbeddings } from "~/lib/embeddings";
+import { NodeType } from "~/types/graph";
 import { TypeId } from "~/types/typeid";
 
 /**
@@ -18,7 +19,7 @@ import { TypeId } from "~/types/typeid";
  */
 export type NodeSearchResult = {
   id: TypeId<"node">;
-  type: string;
+  type: NodeType;
   label: string | null;
   description: string | null;
   similarity: number;
@@ -29,7 +30,7 @@ export type NodeSearchResult = {
  */
 export type NodeWithConnections = {
   id: TypeId<"node">;
-  type: string;
+  type: NodeType;
   label: string;
   description: string | null;
   similarity?: number;
@@ -112,6 +113,16 @@ export async function findSimilarNodes({
     )
     .orderBy(desc(similarity))
     .limit(limit);
+
+  console.log(
+    `\n\nSimilar Nodes to "${text}"\n\n`,
+    similarNodes
+      .map(
+        (sn) =>
+          `- ${sn.label} [${sn.similarity.toFixed(5)}] (${sn.description})`,
+      )
+      .join("\n"),
+  );
 
   return similarNodes;
 }

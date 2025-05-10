@@ -58,7 +58,7 @@ export const nodeMetadata = pgTable(
   {
     id: typeId("node_metadata").primaryKey().notNull(),
     nodeId: typeId("node")
-      .references(() => nodes.id)
+      .references(() => nodes.id, { onDelete: "cascade" })
       .notNull(),
     label: text(), // Human-readable name/title
     description: text(), // Longer text description
@@ -91,10 +91,10 @@ export const edges = pgTable(
       .references(() => users.id)
       .notNull(),
     sourceNodeId: typeId("node")
-      .references(() => nodes.id)
+      .references(() => nodes.id, { onDelete: "cascade" })
       .notNull(),
     targetNodeId: typeId("node")
-      .references(() => nodes.id)
+      .references(() => nodes.id, { onDelete: "cascade" })
       .notNull(),
     edgeType: varchar("edge_type", { length: 50 }).notNull().$type<EdgeType>(), // FK to ontology_edge_types if defined
     // Optional: Metadata for the edge itself (e.g., confidence score, properties of the relationship)
@@ -141,7 +141,7 @@ export const nodeEmbeddings = pgTable(
   {
     id: typeId("node_embedding").primaryKey().notNull(),
     nodeId: typeId("node")
-      .references(() => nodes.id)
+      .references(() => nodes.id, { onDelete: "cascade" })
       .notNull(),
     embedding: vector("embedding", { dimensions: 1024 }).notNull(), // Dimension depends on model
     modelName: varchar("model_name", { length: 100 }).notNull(),
@@ -224,7 +224,7 @@ export const sources = pgTable(
 export type SourcesInsert = typeof sources.$inferInsert;
 export type SourcesSelect = typeof sources.$inferSelect;
 
-export const sourcesRelations = relations(sources, ({ one, many }) => ({
+export const sourcesRelations = relations(sources, ({ one }) => ({
   user: one(users, {
     fields: [sources.userId],
     references: [users.id],
@@ -233,7 +233,6 @@ export const sourcesRelations = relations(sources, ({ one, many }) => ({
     fields: [sources.parentSource],
     references: [sources.id],
   }),
-  children: many(sources),
 }));
 
 export const sourceLinks = pgTable(

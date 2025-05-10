@@ -59,7 +59,7 @@ ${currentAtlas}
 **Past Day's Conversation Summaries:**
 ${convList}
 
-**Task:** Respond only with the updated Assistant Atlas formatted as a neat Markdown file.
+**Task:** Respond only with the updated Assistant Atlas neatly formatted, yet concise (don't use bold etc.)
 `;
 
   // 4. Call LLM

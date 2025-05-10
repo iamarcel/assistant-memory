@@ -51,7 +51,8 @@ ${convList}
 
 Please rewrite the atlas to add important information, remove redundant, out-of-date or irrelevant details, and update your current state of mind.
 Do not repeat the conversation list in the atlas.
-Return only the updated atlas content as a neat Markdown file.
+
+**Task:** Respond only with the updated User Atlas neatly formatted, yet concise (don't use bold etc.)
 `;
 
   // 4. Call LLM

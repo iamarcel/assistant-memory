@@ -114,16 +114,6 @@ export async function findSimilarNodes({
     .orderBy(desc(similarity))
     .limit(limit);
 
-  console.log(
-    `\n\nSimilar Nodes to "${text}"\n\n`,
-    similarNodes
-      .map(
-        (sn) =>
-          `- ${sn.label} [${sn.similarity.toFixed(5)}] (${sn.description})`,
-      )
-      .join("\n"),
-  );
-
   return similarNodes;
 }
 

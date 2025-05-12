@@ -1,6 +1,7 @@
 import { assistantDreamJob } from "./jobs/atlas-assistant";
 import { processAtlasJob } from "./jobs/atlas-user";
 import { CleanupGraphJobInputSchema } from "./jobs/cleanup-graph";
+import { dream } from "./jobs/dream";
 import { IngestConversationJobInputSchema } from "./jobs/ingest-conversation";
 import { summarizeUserConversations } from "./jobs/summarize-conversation";
 import { FlowProducer, Queue, Worker } from "bullmq";
@@ -67,6 +68,12 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           processAtlasJob(db, userId),
           assistantDreamJob(db, userId, assistantId, assistantDescription),
         ]);
+
+        await dream({
+          userId,
+          assistantDescription,
+        });
+
         console.log(
           `\n\nAssistant dream completed for user ${userId}, assistant ${assistantId}.`,
         );

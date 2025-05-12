@@ -1,4 +1,5 @@
 import { formatISO } from "date-fns";
+import type { NodeWithConnections } from "~/lib/graph";
 import { TypeId } from "~/types/typeid";
 
 interface Message {
@@ -49,8 +50,9 @@ export function formatNodesForPrompt(
   }
 
   const xmlItems = existingNodes
-    .map((node) =>
-      `<node id="${escapeXml(node.tempId)}" type="${escapeXml(node.type)}">
+    .map(
+      (node) =>
+        `<node id="${escapeXml(node.tempId)}" type="${escapeXml(node.type)}">
   <label>${escapeXml(node.label ?? "")}</label>
   <description>${node.description || ""}</description>
 </node>`,
@@ -81,4 +83,51 @@ export function formatLabelDescList(
   return `<items>
 ${xmlItems}
 </items>`;
+}
+
+/**
+ * Formats search results as a readable markdown string
+ */
+export function formatAsMarkdown(
+  query: string,
+  allNodes: NodeWithConnections[],
+  directMatches: NodeWithConnections[],
+): string {
+  let result = `Results for query: "${query}"\n\n`;
+
+  // Direct matches section
+  result += `Found ${directMatches.length} direct matches:\n`;
+  directMatches.forEach((node, index) => {
+    const similarityPercentage = Math.round((node.similarity ?? 0) * 100);
+    result += `${index + 1}. ${node.label} (${node.type}, ${similarityPercentage}% match)\n`;
+    if (node.description) {
+      result += `   ${node.description}\n`;
+    }
+    if (node.connectedTo && node.connectedTo.length > 0) {
+      result += `   Connected to ${node.connectedTo.length} other nodes\n`;
+    }
+    result += "\n";
+  });
+
+  // One-hop related nodes
+  const connectedNodes = allNodes.filter((node) => !node.isDirectMatch);
+  if (connectedNodes.length > 0) {
+    result += `\nRelated nodes (one hop away):\n`;
+    connectedNodes.forEach((node, index) => {
+      result += `${index + 1}. ${node.label} (${node.type})\n`;
+      if (node.description) {
+        result += `   ${node.description}\n`;
+      }
+      if (node.connectedTo && node.connectedTo.length > 0) {
+        const labels = node.connectedTo
+          .map((id) => directMatches.find((n) => n.id === id)?.label)
+          .filter(Boolean);
+        if (labels.length > 0) {
+          result += `   Connected to: ${labels.join(", ")}\n`;
+        }
+      }
+      result += "\n";
+    });
+  }
+  return result;
 }

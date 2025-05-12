@@ -1,7 +1,7 @@
 import { debug, debugGraph } from "./debug-utils";
 import { generateAndInsertNodeEmbeddings } from "./embeddings-util";
 import { formatNodesForPrompt } from "./formatting";
-import { findSimilarNodes } from "./search";
+import { findSimilarNodes } from "./graph";
 import { TemporaryIdMapper } from "./temporary-id-mapper";
 import { zodResponseFormat } from "openai/helpers/zod.mjs";
 import { z } from "zod";

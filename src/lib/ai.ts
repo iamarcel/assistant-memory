@@ -1,4 +1,10 @@
 import type OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod.mjs";
+import {
+  ChatCompletionSystemMessageParam,
+  ChatCompletionUserMessageParam,
+} from "openai/resources.mjs";
+import { z } from "zod";
 
 export async function createCompletionClient(userId: string): Promise<OpenAI> {
   const { OpenAI } = await import("openai");
@@ -16,4 +22,72 @@ export async function createCompletionClient(userId: string): Promise<OpenAI> {
       "X-Title": "Assistant Memory",
     },
   });
+}
+
+export async function crateTextCompletion({
+  userId,
+  prompt,
+  systemPrompt,
+}: {
+  userId: string;
+  prompt: string;
+  systemPrompt?: string;
+}): Promise<string> {
+  const client = await createCompletionClient(userId);
+  const completion = await client.chat.completions.create({
+    messages: [
+      ...(systemPrompt
+        ? [
+            {
+              role: "system",
+              content: systemPrompt,
+            } satisfies ChatCompletionSystemMessageParam,
+          ]
+        : []),
+      {
+        role: "user",
+        content: prompt,
+      } satisfies ChatCompletionUserMessageParam,
+    ],
+    model: env.MODEL_ID_GRAPH_EXTRACTION,
+  });
+
+  return completion.choices[0]?.message.content ?? "";
+}
+
+export async function performStructuredAnalysis({
+  userId,
+  prompt,
+  systemPrompt,
+  schema,
+}: {
+  userId: string;
+  prompt: string;
+  systemPrompt?: string;
+  schema: z.ZodObject<z.ZodRawShape>;
+}): Promise<z.infer<typeof schema>> {
+  if (!schema.description) throw new Error("Schema must have a description");
+
+  const client = await createCompletionClient(userId);
+  const completion = await client.beta.chat.completions.parse({
+    messages: [
+      ...(systemPrompt
+        ? [
+            {
+              role: "system",
+              content: systemPrompt,
+            } satisfies ChatCompletionSystemMessageParam,
+          ]
+        : []),
+      {
+        role: "user",
+        content: prompt,
+      } satisfies ChatCompletionUserMessageParam,
+    ],
+    model: env.MODEL_ID_GRAPH_EXTRACTION,
+    response_format: zodResponseFormat(schema, schema.description),
+  });
+  const parsed = completion.choices[0]?.message.parsed;
+  if (!parsed) throw new Error("Failed to parse response");
+  return parsed;
 }

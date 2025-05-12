@@ -3,8 +3,8 @@ import {
   findSimilarNodes,
   findOneHopConnections,
   processSearchResultsWithConnections,
-  formatSearchResultsAsString,
-} from "~/lib/search";
+  formatAsMarkdown,
+} from "~/lib/graph";
 import { typeIdSchema } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
 
@@ -62,7 +62,7 @@ export default defineEventHandler(async (event) => {
     processSearchResultsWithConnections(similarNodes, oneHopConnections);
 
   // Format the results as a nice string
-  const formattedResult = formatSearchResultsAsString(
+  const formattedResult = formatAsMarkdown(
     query,
     allNodes,
     directMatches,

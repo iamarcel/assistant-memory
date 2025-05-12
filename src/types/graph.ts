@@ -15,6 +15,7 @@ export const NodeTypeEnum = z.enum([
   "Temporal",
   "Conversation",
   "Atlas",
+  "AssistantDream",
 ]);
 
 export type NodeType = z.infer<typeof NodeTypeEnum>;

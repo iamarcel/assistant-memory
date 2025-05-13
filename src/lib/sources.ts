@@ -79,6 +79,9 @@ export class SourceService {
     const inserted = await this.db
       .insert(sources)
       .values(insertRows)
+      .onConflictDoNothing({
+        target: [sources.userId, sources.type, sources.externalId],
+      })
       .returning();
 
     // 2. Handle payloads

@@ -3,6 +3,7 @@ import { processAtlasJob } from "./jobs/atlas-user";
 import { CleanupGraphJobInputSchema } from "./jobs/cleanup-graph";
 import { dream } from "./jobs/dream";
 import { IngestConversationJobInputSchema } from "./jobs/ingest-conversation";
+import { IngestDocumentJobInputSchema } from "./jobs/ingest-document";
 import { summarizeUserConversations } from "./jobs/summarize-conversation";
 import { FlowProducer, Queue, Worker } from "bullmq";
 import IORedis from "ioredis";
@@ -95,6 +96,26 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
         });
         console.log(
           `Ingested conversation ${conversationId} for user ${userId}.`,
+        );
+      } else if (job.name === "ingest-document") {
+        const { userId, documentId, content, timestamp } =
+          IngestDocumentJobInputSchema.parse(job.data);
+        console.log(
+          `Starting ingest-document job for user ${userId}, document ${documentId}`,
+        );
+
+        const { ingestDocument } = await import(
+          "./jobs/ingest-document"
+        );
+        await ingestDocument({
+          db,
+          userId,
+          documentId,
+          content,
+          timestamp,
+        });
+        console.log(
+          `Ingested document ${documentId} for user ${userId}.`,
         );
       } else if (job.name === "cleanup-graph") {
         const data = CleanupGraphJobInputSchema.parse({

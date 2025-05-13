@@ -2,13 +2,11 @@ import { extractGraph } from "../extract-graph";
 import { formatConversationAsXml } from "../formatting";
 import { ensureUser } from "../ingestion/ensure-user";
 import { insertNewSources } from "../ingestion/insert-new-sources";
-import { ensureDayNode } from "../temporal";
-import { and, eq } from "drizzle-orm";
+import { ensureSourceNode } from "../ingestion/ensure-source-node";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
-import { edges, nodes, NodeSelect, sourceLinks, sources } from "~/db/schema";
 import { type ConversationTurn } from "~/lib/conversation-store";
-import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
+import { NodeTypeEnum } from "~/types/graph";
 import { TypeId } from "~/types/typeid";
 
 export const MessageSchema = z.object({
@@ -57,12 +55,13 @@ export async function ingestConversation({
   }
   // Safe: insertedTurns non-empty after guard
   const firstTurn = insertedTurns[0]!;
-  const conversationNodeId = await ensureConversationGraph(
+  const conversationNodeId = await ensureSourceNode({
     db,
     userId,
-    sourceNodeId,
-    firstTurn.timestamp,
-  );
+    sourceId: sourceNodeId,
+    timestamp: firstTurn.timestamp,
+    nodeType: NodeTypeEnum.enum.Conversation,
+  });
   await extractGraph({
     userId,
     sourceType: "conversation",
@@ -121,72 +120,4 @@ async function initializeConversation(
       timestamp: m.timestamp,
     }));
   return { sourceNodeId, insertedTurns };
-}
-
-async function ensureConversationGraph(
-  db: DrizzleDB,
-  userId: string,
-  sourceId: TypeId<"source">,
-  timestamp: Date,
-): Promise<TypeId<"node">> {
-  let conversationNode: NodeSelect | undefined;
-  const conversationNodesResult = await db
-    .select()
-    .from(nodes)
-    .innerJoin(sourceLinks, eq(sourceLinks.nodeId, nodes.id))
-    .innerJoin(sources, eq(sources.id, sourceLinks.sourceId))
-    .where(
-      and(
-        eq(nodes.userId, userId),
-        eq(nodes.nodeType, NodeTypeEnum.enum.Conversation),
-        eq(sources.externalId, sourceId),
-      ),
-    )
-    .limit(1);
-  conversationNode = conversationNodesResult[0]?.nodes;
-
-  if (!conversationNode) {
-    // Create conversation node
-    const [newNode] = await db
-      .insert(nodes)
-      .values({
-        userId,
-        nodeType: NodeTypeEnum.enum.Conversation,
-        createdAt: timestamp,
-      })
-      .returning();
-
-    if (!newNode) {
-      throw new Error("Failed to create conversation node");
-    }
-
-    // Link to source
-    const [newSourceLink] = await db
-      .insert(sourceLinks)
-      .values({
-        sourceId,
-        nodeId: newNode.id,
-      })
-      .returning();
-
-    if (!newSourceLink) {
-      throw new Error("Failed to create source link");
-    }
-
-    // Link to day node
-    const dayNodeId = await ensureDayNode(db, userId, timestamp);
-    await db
-      .insert(edges)
-      .values({
-        userId,
-        edgeType: EdgeTypeEnum.Enum.OCCURRED_ON,
-        sourceNodeId: newNode.id,
-        targetNodeId: dayNodeId,
-      })
-      .onConflictDoNothing();
-
-    conversationNode = newNode;
-  }
-
-  return conversationNode.id;
 }

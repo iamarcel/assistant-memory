@@ -16,6 +16,7 @@ export const NodeTypeEnum = z.enum([
   "Conversation",
   "Atlas",
   "AssistantDream",
+  "Document",
 ]);
 
 export type NodeType = z.infer<typeof NodeTypeEnum>;
@@ -37,7 +38,7 @@ export const EdgeTypeEnum = z.enum([
 
 export type EdgeType = z.infer<typeof EdgeTypeEnum>;
 
-export type SourceType = "conversation" | "conversation_message";
+export type SourceType = "conversation" | "conversation_message" | "document";
 
 export type SourceStatus =
   | "pending"

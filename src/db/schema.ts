@@ -173,7 +173,7 @@ export const aliases = pgTable("aliases", {
     .notNull(),
   aliasText: text().notNull(), // The alias string (e.g., "I", "MW", "Mom")
   canonicalNodeId: typeId("node")
-    .references(() => nodes.id)
+    .references(() => nodes.id, { onDelete: "cascade" })
     .notNull(), // The node this alias refers to
   createdAt: timestamp().defaultNow().notNull(),
   // Index on (userId, aliasText) for fast lookups
@@ -240,10 +240,10 @@ export const sourceLinks = pgTable(
   {
     id: typeId("source_link").primaryKey().notNull(),
     sourceId: typeId("source")
-      .references(() => sources.id)
+      .references(() => sources.id, { onDelete: "cascade" })
       .notNull(),
     nodeId: typeId("node")
-      .references(() => nodes.id)
+      .references(() => nodes.id, { onDelete: "cascade" })
       .notNull(), // The ID of the node or edge
     // Optional: more specific location within the source (e.g., block ID, line number, timestamp in audio)
     specificLocation: text(),

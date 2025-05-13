@@ -5,7 +5,8 @@ import { TemporaryIdMapper } from "../temporary-id-mapper";
 import { sql, eq, gte, desc, and, inArray } from "drizzle-orm";
 import { zodResponseFormat } from "openai/helpers/zod.mjs";
 import { z } from "zod";
-import { nodes, edges, nodeMetadata } from "~/db/schema";
+import { DrizzleDB } from "~/db";
+import { nodes, edges, nodeMetadata, sourceLinks } from "~/db/schema";
 import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
 import type { EdgeType, NodeType } from "~/types/graph";
 import { TypeId } from "~/types/typeid";
@@ -40,12 +41,6 @@ export interface GraphNode {
 /**
  * Core graph types
  */
-export interface GraphNode {
-  id: TypeId<"node">;
-  label: string;
-  description: string;
-  type: NodeType;
-}
 export interface GraphEdge {
   source: TypeId<"node">;
   target: TypeId<"node">;
@@ -379,60 +374,20 @@ async function applyCleanupProposal(
 ): Promise<CleanupGraphResult> {
   return db.transaction(async (tx) => {
     const merged: CleanupGraphResult["merged"] = [];
-    // merges: rewire edges then delete nodes
+    const removed: CleanupGraphResult["removed"] = [];
+    const addedEdges: CleanupGraphResult["addedEdges"] = [];
+    const createdNodes: CleanupGraphResult["createdNodes"] = [];
+
+    // Merges
     for (const m of proposal.merges) {
       const keepNode = mapper.getItem(m.keep);
       const removeNode = mapper.getItem(m.remove);
       if (!keepNode || !removeNode) continue;
       const keepId = keepNode.id;
       const removeId = removeNode.id;
-      // rewire edges (only for this user), avoid unique constraint errors
-      // Upsert: if (keepId, targetId) or (sourceId, keepId) already exists, skip
-      // Out-edges
-      const outEdges = await tx
-        .select()
-        .from(edges)
-        .where(and(eq(edges.sourceNodeId, removeId), eq(edges.userId, userId)));
-      for (const edge of outEdges) {
-        await tx
-          .insert(edges)
-          .values({
-            ...edge,
-            id: undefined,
-            sourceNodeId: keepId,
-          })
-          .onConflictDoNothing({
-            target: [edges.sourceNodeId, edges.targetNodeId],
-          });
-      }
-      await tx
-        .delete(edges)
-        .where(and(eq(edges.sourceNodeId, removeId), eq(edges.userId, userId)));
-      // In-edges
-      const inEdges = await tx
-        .select()
-        .from(edges)
-        .where(and(eq(edges.targetNodeId, removeId), eq(edges.userId, userId)));
-      for (const edge of inEdges) {
-        await tx
-          .insert(edges)
-          .values({
-            ...edge,
-            id: undefined,
-            targetNodeId: keepId,
-          })
-          .onConflictDoNothing({
-            target: [edges.sourceNodeId, edges.targetNodeId],
-          });
-      }
-      await tx
-        .delete(edges)
-        .where(and(eq(edges.targetNodeId, removeId), eq(edges.userId, userId)));
-      // Only delete the node; cascading will handle metadata, embeddings, and edges
-      await tx
-        .delete(nodes)
-        .where(and(eq(nodes.id, removeId), eq(nodes.userId, userId)));
-      // Retrieve labels/descriptions for debugging from mapper
+      await rewireNodeEdges(tx, removeId, keepId, userId);
+      await rewireSourceLinks(tx, removeId, keepId);
+      await deleteNode(tx, removeId, userId);
       const keepNodeInfo = mapper.getItem(keepId);
       const removeNodeInfo = mapper.getItem(removeId);
       const item: CleanupGraphResult["merged"][0] = {
@@ -446,16 +401,12 @@ async function applyCleanupProposal(
       merged.push(item);
     }
 
-    const removed: CleanupGraphResult["removed"] = [];
+    // Deletes
     for (const d of proposal.deletes) {
       const node = mapper.getItem(d.tempId);
       if (!node) continue;
       const nodeId = node.id;
-      // Only delete the node; cascading will handle metadata, embeddings, and edges
-      await tx
-        .delete(nodes)
-        .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
-      // Retrieve label/description for debugging from mapper
+      await deleteNode(tx, nodeId, userId);
       const nodeInfo = mapper.getItem(nodeId);
       const rem: CleanupGraphResult["removed"][0] = {
         nodeId,
@@ -465,7 +416,7 @@ async function applyCleanupProposal(
       removed.push(rem);
     }
 
-    const addedEdges: CleanupGraphResult["addedEdges"] = [];
+    // Additions
     for (const e of proposal.additions) {
       const srcNode = mapper.getItem(e.source);
       const tgtNode = mapper.getItem(e.target);
@@ -473,7 +424,7 @@ async function applyCleanupProposal(
       await tx
         .insert(edges)
         .values({
-          userId,
+          userId: userId,
           sourceNodeId: srcNode.id,
           targetNodeId: tgtNode.id,
           edgeType: e.type,
@@ -485,16 +436,11 @@ async function applyCleanupProposal(
       addedEdges.push({ source: srcNode.id, target: tgtNode.id, type: e.type });
     }
 
-    const createdNodes: CleanupGraphResult["createdNodes"] = [];
-    // Create new nodes from proposal
+    // New nodes
     for (const n of proposal.newNodes) {
-      // Insert node
       const inserted = await tx
         .insert(nodes)
-        .values({
-          userId,
-          nodeType: n.type,
-        })
+        .values({ userId: userId, nodeType: n.type })
         .returning({ id: nodes.id });
       const nodeId = inserted[0]?.id;
       if (!nodeId) continue;
@@ -503,6 +449,7 @@ async function applyCleanupProposal(
         .values({ nodeId, label: n.label, description: n.description });
       createdNodes.push({ nodeId, label: n.label, description: n.description });
     }
+
     // Generate embeddings for all created nodes with labels
     await generateAndInsertNodeEmbeddings(
       tx,
@@ -514,8 +461,94 @@ async function applyCleanupProposal(
           description: node.description,
         })),
     );
+
     return { merged, removed, addedEdges, createdNodes };
   });
+}
+
+/**
+ * Rewire edges from removeId to keepId for a given user
+ */
+async function rewireNodeEdges(
+  tx: DrizzleDB,
+  removeId: TypeId<"node">,
+  keepId: TypeId<"node">,
+  userId: string,
+) {
+  // Out-going edges
+  const outEdges = await tx
+    .select()
+    .from(edges)
+    .where(and(eq(edges.sourceNodeId, removeId), eq(edges.userId, userId)));
+  for (const edge of outEdges) {
+    await tx
+      .insert(edges)
+      .values({
+        userId: edge.userId,
+        sourceNodeId: keepId,
+        targetNodeId: edge.targetNodeId,
+        edgeType: edge.edgeType,
+        metadata: edge.metadata,
+      })
+      .onConflictDoNothing({
+        target: [edges.sourceNodeId, edges.targetNodeId],
+      });
+  }
+  await tx
+    .delete(edges)
+    .where(and(eq(edges.sourceNodeId, removeId), eq(edges.userId, userId)));
+  // In-coming edges
+  const inEdges = await tx
+    .select()
+    .from(edges)
+    .where(and(eq(edges.targetNodeId, removeId), eq(edges.userId, userId)));
+  for (const edge of inEdges) {
+    await tx
+      .insert(edges)
+      .values({
+        userId: edge.userId,
+        sourceNodeId: edge.sourceNodeId,
+        targetNodeId: keepId,
+        edgeType: edge.edgeType,
+        metadata: edge.metadata,
+      })
+      .onConflictDoNothing({
+        target: [edges.sourceNodeId, edges.targetNodeId],
+      });
+  }
+  await tx
+    .delete(edges)
+    .where(and(eq(edges.targetNodeId, removeId), eq(edges.userId, userId)));
+}
+
+/**
+ * Rewire source_links entries from removeId to keepId
+ */
+async function rewireSourceLinks(
+  tx: DrizzleDB,
+  removeId: TypeId<"node">,
+  keepId: TypeId<"node">,
+) {
+  const links = await tx.select().from(sourceLinks).where(eq(sourceLinks.nodeId, removeId));
+  for (const link of links) {
+    await tx.insert(sourceLinks)
+      .values({ ...link, id: undefined, nodeId: keepId })
+      .onConflictDoNothing({ target: [sourceLinks.sourceId, sourceLinks.nodeId] });
+  }
+  await tx.delete(sourceLinks).where(eq(sourceLinks.nodeId, removeId));
+}
+
+/**
+ * Delete a node for a given user; cascades remove related data
+ */
+async function deleteNode(
+  tx: DrizzleDB,
+  nodeId: TypeId<"node">,
+  userId: string,
+) {
+  await tx
+    .delete(nodes)
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 }
 
 /**

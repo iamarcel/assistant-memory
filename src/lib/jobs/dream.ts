@@ -213,9 +213,6 @@ async function persistDream(
   dayId: TypeId<"node">,
   dreamContent: string,
 ) {
-  console.log("\n\n\nPersisting dream", dreamContent);
-  console.log("\n\n\n");
-
   const inserted = await db
     .insert(nodes)
     .values({

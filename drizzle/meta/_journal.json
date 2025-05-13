@@ -29,6 +29,13 @@
       "when": 1746987372519,
       "tag": "0003_minor_stepford_cuckoos",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1747120671422,
+      "tag": "0004_handy_the_enforcers",
+      "breakpoints": true
     }
   ]
 }

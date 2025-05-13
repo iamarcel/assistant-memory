@@ -378,7 +378,41 @@ async function applyCleanupProposal(
     const addedEdges: CleanupGraphResult["addedEdges"] = [];
     const createdNodes: CleanupGraphResult["createdNodes"] = [];
 
-    // Merges
+    // Preprocessing: remap temp IDs for merges
+    const remap = new Map<string, string>();
+    for (const { keep, remove } of proposal.merges) {
+      remap.set(remove, keep);
+    }
+    // Rewrite deletes with remapped IDs and dedupe
+    const newDeletes = Array.from(
+      new Set(proposal.deletes.map((d) => remap.get(d.tempId) ?? d.tempId)),
+    ).map((tempId) => ({ tempId }));
+    // Rewrite additions with remapped IDs, drop self-edges
+    const newEdges = proposal.additions
+      .map(({ source, target, type }) => ({
+        source: remap.get(source) ?? source,
+        target: remap.get(target) ?? target,
+        type,
+      }))
+      .filter((e) => e.source !== e.target);
+    // Keep newNodes as-is
+    const newNodes = [...proposal.newNodes];
+
+    // Step 1: Create new nodes
+    for (const n of newNodes) {
+      const inserted = await tx
+        .insert(nodes)
+        .values({ userId, nodeType: n.type })
+        .returning({ id: nodes.id });
+      const nodeId = inserted[0]?.id;
+      if (!nodeId) continue;
+      await tx
+        .insert(nodeMetadata)
+        .values({ nodeId, label: n.label, description: n.description });
+      createdNodes.push({ nodeId, label: n.label, description: n.description });
+    }
+
+    // Step 2: Merges
     for (const m of proposal.merges) {
       const keepNode = mapper.getItem(m.keep);
       const removeNode = mapper.getItem(m.remove);
@@ -388,66 +422,50 @@ async function applyCleanupProposal(
       await rewireNodeEdges(tx, removeId, keepId, userId);
       await rewireSourceLinks(tx, removeId, keepId);
       await deleteNode(tx, removeId, userId);
-      const keepNodeInfo = mapper.getItem(keepId);
-      const removeNodeInfo = mapper.getItem(removeId);
-      const item: CleanupGraphResult["merged"][0] = {
+      const keepInfo = mapper.getItem(keepId);
+      const removeInfo = mapper.getItem(removeId);
+      merged.push({
         keep: keepId,
-        keepLabel: keepNodeInfo?.label ?? "",
-        keepDescription: keepNodeInfo?.description ?? "",
+        keepLabel: keepInfo?.label ?? "",
+        keepDescription: keepInfo?.description ?? "",
         remove: removeId,
-        removeLabel: removeNodeInfo?.label ?? "",
-        removeDescription: removeNodeInfo?.description ?? "",
-      };
-      merged.push(item);
+        removeLabel: removeInfo?.label ?? "",
+        removeDescription: removeInfo?.description ?? "",
+      });
     }
 
-    // Deletes
-    for (const d of proposal.deletes) {
-      const node = mapper.getItem(d.tempId);
-      if (!node) continue;
-      const nodeId = node.id;
-      await deleteNode(tx, nodeId, userId);
-      const nodeInfo = mapper.getItem(nodeId);
-      const rem: CleanupGraphResult["removed"][0] = {
-        nodeId,
-        label: nodeInfo?.label ?? "",
-        description: nodeInfo?.description ?? "",
-      };
-      removed.push(rem);
-    }
-
-    // Additions
-    for (const e of proposal.additions) {
-      const srcNode = mapper.getItem(e.source);
-      const tgtNode = mapper.getItem(e.target);
-      if (!srcNode || !tgtNode) continue;
+    // Step 3: Additions
+    for (const e of newEdges) {
+      const src = mapper.getItem(e.source);
+      const tgt = mapper.getItem(e.target);
+      if (!src || !tgt) continue;
       await tx
         .insert(edges)
         .values({
-          userId: userId,
-          sourceNodeId: srcNode.id,
-          targetNodeId: tgtNode.id,
+          userId,
+          sourceNodeId: src.id,
+          targetNodeId: tgt.id,
           edgeType: e.type,
           metadata: {},
         })
         .onConflictDoNothing({
           target: [edges.sourceNodeId, edges.targetNodeId],
         });
-      addedEdges.push({ source: srcNode.id, target: tgtNode.id, type: e.type });
+      addedEdges.push({ source: src.id, target: tgt.id, type: e.type });
     }
 
-    // New nodes
-    for (const n of proposal.newNodes) {
-      const inserted = await tx
-        .insert(nodes)
-        .values({ userId: userId, nodeType: n.type })
-        .returning({ id: nodes.id });
-      const nodeId = inserted[0]?.id;
-      if (!nodeId) continue;
-      await tx
-        .insert(nodeMetadata)
-        .values({ nodeId, label: n.label, description: n.description });
-      createdNodes.push({ nodeId, label: n.label, description: n.description });
+    // Step 4: Deletes
+    for (const d of newDeletes) {
+      const node = mapper.getItem(d.tempId);
+      if (!node) continue;
+      const id = node.id;
+      await deleteNode(tx, id, userId);
+      const info = mapper.getItem(id);
+      removed.push({
+        nodeId: id,
+        label: info?.label ?? "",
+        description: info?.description ?? "",
+      });
     }
 
     // Generate embeddings for all created nodes with labels
@@ -529,11 +547,17 @@ async function rewireSourceLinks(
   removeId: TypeId<"node">,
   keepId: TypeId<"node">,
 ) {
-  const links = await tx.select().from(sourceLinks).where(eq(sourceLinks.nodeId, removeId));
+  const links = await tx
+    .select()
+    .from(sourceLinks)
+    .where(eq(sourceLinks.nodeId, removeId));
   for (const link of links) {
-    await tx.insert(sourceLinks)
+    await tx
+      .insert(sourceLinks)
       .values({ ...link, id: undefined, nodeId: keepId })
-      .onConflictDoNothing({ target: [sourceLinks.sourceId, sourceLinks.nodeId] });
+      .onConflictDoNothing({
+        target: [sourceLinks.sourceId, sourceLinks.nodeId],
+      });
   }
   await tx.delete(sourceLinks).where(eq(sourceLinks.nodeId, removeId));
 }

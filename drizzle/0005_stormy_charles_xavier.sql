@@ -1,0 +1,1 @@
+ALTER TABLE "source_links" ADD CONSTRAINT "source_links_sourceId_nodeId_unique" UNIQUE("source_id","node_id");

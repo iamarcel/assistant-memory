@@ -250,6 +250,7 @@ export const sourceLinks = pgTable(
     createdAt: timestamp().defaultNow().notNull(),
   },
   (table) => [
+    unique().on(table.sourceId, table.nodeId),
     index("source_links_source_id_idx").on(table.sourceId),
     index("source_links_node_id_idx").on(table.nodeId),
   ],

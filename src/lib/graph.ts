@@ -13,7 +13,7 @@ import { DrizzleDB } from "~/db";
 import { nodes, nodeMetadata, nodeEmbeddings, edges } from "~/db/schema";
 import { generateEmbeddings } from "~/lib/embeddings";
 import { formatAsMarkdown } from "~/lib/formatting";
-import type { NodeType, EdgeType } from "~/types/graph";
+import { type NodeType, type EdgeType, NodeTypeEnum } from "~/types/graph";
 import type { TypeId } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
 
@@ -205,6 +205,27 @@ export function processSearchResultsWithConnections(
     connectedNodes,
     allNodes: [...directMatches, ...connectedNodes],
   };
+}
+
+/** Helper to fetch the Temporal day node id for a given userId and date */
+export async function findDayNode(
+  db: DrizzleDB,
+  userId: string,
+  date: string,
+): Promise<TypeId<"node"> | null> {
+  const [day] = await db
+    .select({ id: nodes.id })
+    .from(nodes)
+    .innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodes.id))
+    .where(
+      and(
+        eq(nodes.userId, userId),
+        eq(nodes.nodeType, NodeTypeEnum.enum.Temporal),
+        eq(nodeMetadata.label, date),
+      ),
+    )
+    .limit(1);
+  return day?.id ?? null;
 }
 
 // Formatting helper

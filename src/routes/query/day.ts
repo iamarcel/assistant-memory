@@ -2,7 +2,8 @@ import { and, eq, ne, or } from "drizzle-orm";
 import { defineEventHandler } from "h3";
 import { z } from "zod";
 import { edges, nodeMetadata, nodes } from "~/db/schema";
-import { EdgeType, NodeTypeEnum } from "~/types/graph";
+import { findDayNode } from "~/lib/graph";
+import { EdgeType } from "~/types/graph";
 import { useDatabase } from "~/utils/db";
 
 // Define the request schema
@@ -24,23 +25,9 @@ export default defineEventHandler(async (event) => {
   );
   const db = await useDatabase();
 
-  // Find the day node for the specified date
-  const [dayNode] = await db
-    .select({
-      id: nodes.id,
-    })
-    .from(nodes)
-    .innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodes.id))
-    .where(
-      and(
-        eq(nodes.userId, userId),
-        eq(nodes.nodeType, NodeTypeEnum.enum.Temporal),
-        eq(nodeMetadata.label, date),
-      ),
-    )
-    .limit(1);
-
-  if (!dayNode) {
+  // Fetch the day node id for the specified date
+  const dayNodeId = await findDayNode(db, userId, date);
+  if (!dayNodeId) {
     return {
       date,
       error: `No day node found for ${date}`,
@@ -64,11 +51,11 @@ export default defineEventHandler(async (event) => {
       edges,
       or(
         and(
-          eq(edges.sourceNodeId, dayNode.id),
+          eq(edges.sourceNodeId, dayNodeId),
           eq(edges.targetNodeId, nodes.id),
         ),
         and(
-          eq(edges.targetNodeId, dayNode.id),
+          eq(edges.targetNodeId, dayNodeId),
           eq(edges.sourceNodeId, nodes.id),
         ),
       ),
@@ -78,7 +65,7 @@ export default defineEventHandler(async (event) => {
       and(
         eq(edges.userId, userId),
         eq(nodes.userId, userId),
-        ne(nodes.id, dayNode.id), // Exclude the day node itself
+        ne(nodes.id, dayNodeId), // Exclude the day node itself
       ),
     );
 

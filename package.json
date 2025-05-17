@@ -1,5 +1,5 @@
 {
-  "private": true,
+  "private": false,
   "name": "@marcelsamyn/memory",
   "version": "0.1.0",
   "main": "dist/server/index.mjs",

@@ -1,26 +1,20 @@
 import { and, eq, ne, or } from "drizzle-orm";
 import { defineEventHandler } from "h3";
-import { z } from "zod";
 import { edges, nodeMetadata, nodes } from "~/db/schema";
 import { findDayNode } from "~/lib/graph";
 import { EdgeType } from "~/types/graph";
 import { useDatabase } from "~/utils/db";
-
-// Define the request schema
-const dayNodesRequestSchema = z.object({
-  userId: z.string(),
-  date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
-  includeFormattedResult: z.boolean().default(true),
-});
+import {
+  queryDayRequestSchema,
+  queryDayResponseSchema,
+} from "~/lib/schemas/query-day";
 
 // TODO Validate to make sure we have one-hop results
 // eg., conversation is linked to the day node
 //      and what's mentioned inside is one hop further
 
 export default defineEventHandler(async (event) => {
-  const { userId, date, includeFormattedResult } = dayNodesRequestSchema.parse(
+  const { userId, date, includeFormattedResult } = queryDayRequestSchema.parse(
     await readBody(event),
   );
   const db = await useDatabase();
@@ -28,11 +22,11 @@ export default defineEventHandler(async (event) => {
   // Fetch the day node id for the specified date
   const dayNodeId = await findDayNode(db, userId, date);
   if (!dayNodeId) {
-    return {
+    return queryDayResponseSchema.parse({
       date,
       error: `No day node found for ${date}`,
       nodes: [],
-    };
+    });
   }
 
   // Single optimized query to get connected nodes with their metadata
@@ -122,32 +116,10 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return dayNodesResponseSchema.parse({
+  return queryDayResponseSchema.parse({
     date,
     nodeCount: uniqueConnectedNodes.length, // Use count of unique nodes
     ...(includeFormattedResult && formattedResult ? { formattedResult } : {}),
     nodes: uniqueConnectedNodes, // Return the unique list
   });
 });
-
-const dayNodesResponseSchema = z.object({
-  date: z.string(),
-  nodeCount: z.number().optional(),
-  formattedResult: z.string().optional(),
-  nodes: z.array(
-    z.object({
-      id: z.string(),
-      nodeType: z.string(),
-      metadata: z.object({
-        label: z.string().optional(),
-        description: z.string().optional(),
-      }),
-      // Note: edgeType here might be less meaningful after deduplication,
-      // as a node might have connected via multiple edge types.
-      // The first encountered edgeType during deduplication is kept.
-      edgeType: z.string().optional(),
-    }),
-  ),
-});
-
-export type DayNodesResponse = z.infer<typeof dayNodesResponseSchema>;

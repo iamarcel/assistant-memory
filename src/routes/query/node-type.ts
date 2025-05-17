@@ -1,44 +1,25 @@
 import { defineEventHandler } from "h3";
-import { z } from "zod";
 import { findDayNode, findOneHopConnections } from "~/lib/graph";
-import { NodeTypeEnum } from "~/types/graph";
+import {
+  queryNodeTypeRequestSchema,
+  queryNodeTypeResponseSchema,
+} from "~/lib/schemas/query-node-type";
 import { useDatabase } from "~/utils/db";
-
-const nodeTypeRequestSchema = z.object({
-  userId: z.string(),
-  types: z.array(NodeTypeEnum),
-  date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
-  includeFormattedResult: z.boolean().default(true),
-});
-
-const nodeTypeResponseSchema = z.object({
-  date: z.string(),
-  types: z.array(NodeTypeEnum),
-  nodeCount: z.number().optional(),
-  formattedResult: z.string().optional(),
-  nodes: z.array(
-    z.object({
-      id: z.string(),
-      nodeType: NodeTypeEnum,
-      metadata: z.object({
-        label: z.string(),
-        description: z.string().optional(),
-      }),
-    }),
-  ),
-});
 
 export default defineEventHandler(async (event) => {
   const { userId, types, date, includeFormattedResult } =
-    nodeTypeRequestSchema.parse(await readBody(event));
+    queryNodeTypeRequestSchema.parse(await readBody(event));
   const db = await useDatabase();
 
   // Get the day node ID
   const dayNodeId = await findDayNode(db, userId, date);
   if (!dayNodeId) {
-    return { date, error: `No day node found for ${date}`, nodes: [] };
+    return queryNodeTypeResponseSchema.parse({
+      date,
+      types,
+      error: `No day node found for ${date}`,
+      nodes: [],
+    });
   }
 
   // Fetch one-hop connections (only nodes with labels)
@@ -81,7 +62,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return nodeTypeResponseSchema.parse({
+  return queryNodeTypeResponseSchema.parse({
     date,
     types,
     nodeCount: uniqueRecords.length,

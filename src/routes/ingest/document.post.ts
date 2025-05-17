@@ -1,15 +1,9 @@
-import { z } from "zod";
 import { IngestDocumentJobInput } from "~/lib/jobs/ingest-document";
 import { batchQueue } from "~/lib/queues";
-
-const ingestDocumentRequestSchema = z.object({
-  userId: z.string(),
-  document: z.object({
-    id: z.string(),
-    content: z.string(),
-    timestamp: z.string().datetime().pipe(z.coerce.date()).optional(), // Timestamp is optional
-  }),
-});
+import {
+  ingestDocumentRequestSchema,
+  ingestDocumentResponseSchema,
+} from "~/lib/schemas/ingest-document-request";
 
 export default defineEventHandler(async (event) => {
   const { userId, document } = ingestDocumentRequestSchema.parse(
@@ -26,8 +20,8 @@ export default defineEventHandler(async (event) => {
 
   await batchQueue.add("ingest-document", jobInput);
 
-  return {
+  return ingestDocumentResponseSchema.parse({
     message: "Document ingestion job accepted",
     jobId: jobInput.documentId,
-  }; // Returning a job ID might be useful
+  });
 });

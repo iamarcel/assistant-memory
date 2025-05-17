@@ -17,6 +17,8 @@ export const NodeTypeEnum = z.enum([
   "Atlas",
   "AssistantDream",
   "Document",
+  "Feedback",
+  "Idea",
 ]);
 
 export type NodeType = z.infer<typeof NodeTypeEnum>;
@@ -34,6 +36,7 @@ export const EdgeTypeEnum = z.enum([
   "FOLLOWS",
   "RELATED_TO",
   "CAPTURED_IN",
+  "INVALIDATED_ON",
 ]);
 
 export type EdgeType = z.infer<typeof EdgeTypeEnum>;

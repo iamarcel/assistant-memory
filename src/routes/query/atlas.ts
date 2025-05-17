@@ -1,15 +1,13 @@
 import { defineEventHandler } from "h3";
-import { z } from "zod";
 import { getAtlas, getAssistantAtlas } from "~/lib/atlas";
 import { useDatabase } from "~/utils/db";
-
-const atlasRequestSchema = z.object({
-  userId: z.string(),
-  assistantId: z.string(),
-});
+import {
+  queryAtlasRequestSchema,
+  queryAtlasResponseSchema,
+} from "~/lib/schemas/query-atlas";
 
 export default defineEventHandler(async (event) => {
-  const { userId, assistantId } = atlasRequestSchema.parse(
+  const { userId, assistantId } = queryAtlasRequestSchema.parse(
     await readBody(event),
   );
   const db = await useDatabase();
@@ -22,8 +20,7 @@ export default defineEventHandler(async (event) => {
   );
 
   // Combine both atlases into a single string
-  return {
-    atlas: `
+  const combinedAtlas = `
 ${
   userDesc
     ? `
@@ -40,6 +37,7 @@ ${
 ${assistantDesc}
 </context>`
     : ""
-}`,
-  };
+}`;
+
+  return queryAtlasResponseSchema.parse({ atlas: combinedAtlas.trim() });
 });

@@ -1,23 +1,10 @@
 import { parseISO } from "date-fns";
-import { z } from "zod";
 import { IngestConversationJobInput } from "~/lib/jobs/ingest-conversation";
 import { batchQueue } from "~/lib/queues";
-
-const ingestConversationRequestSchema = z.object({
-  userId: z.string(),
-  conversation: z.object({
-    id: z.string(),
-    messages: z.array(
-      z.object({
-        id: z.string(),
-        content: z.string(),
-        role: z.string(),
-        name: z.string().optional(),
-        timestamp: z.string().datetime(),
-      }),
-    ),
-  }),
-});
+import {
+  ingestConversationRequestSchema,
+  ingestConversationResponseSchema,
+} from "~/lib/schemas/ingest-conversation";
 
 export default defineEventHandler(async (event) => {
   const { userId, conversation } = ingestConversationRequestSchema.parse(
@@ -37,4 +24,9 @@ export default defineEventHandler(async (event) => {
   };
 
   await batchQueue.add("ingest-conversation", jobInput);
+
+  return ingestConversationResponseSchema.parse({
+    message: "Conversation ingestion job accepted",
+    jobId: conversation.id,
+  });
 });

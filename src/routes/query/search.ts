@@ -1,40 +1,18 @@
-import { z } from "zod";
 import {
   findSimilarNodes,
   findOneHopConnections,
   processSearchResultsWithConnections,
   formatAsMarkdown,
 } from "~/lib/graph";
-import { typeIdSchema } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
-
-// Define the request schema
-const queryRequestSchema = z.object({
-  userId: z.string(),
-  query: z.string().min(1),
-  limit: z.number().int().min(1).max(50).default(10),
-});
-
-const querySearchResponseSchema = z.object({
-  query: z.string(),
-  directMatches: z.number(),
-  connectedNodes: z.number(),
-  formattedResult: z.string(),
-  nodes: z.array(
-    z.object({
-      id: typeIdSchema("node"),
-      type: z.string(),
-      label: z.string(),
-      description: z.string().optional().nullable(),
-      isDirectMatch: z.boolean().optional(),
-      connectedTo: z.array(typeIdSchema("node")).optional(),
-    }),
-  ),
-});
+import {
+  querySearchRequestSchema,
+  querySearchResponseSchema,
+} from "~/lib/schemas/query-search";
 
 export default defineEventHandler(async (event) => {
   // Parse the request
-  const { userId, query, limit } = queryRequestSchema.parse(
+  const { userId, query, limit } = querySearchRequestSchema.parse(
     await readBody(event),
   );
   const db = await useDatabase();

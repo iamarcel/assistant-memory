@@ -1,7 +1,29 @@
 {
   "private": true,
+  "name": "@marcelsamyn/memory",
+  "version": "0.1.0",
+  "main": "dist/server/index.mjs",
+  "types": "dist/server/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/server/index.mjs",
+      "types": "./dist/server/index.d.ts"
+    },
+    "./sdk": {
+      "import": "./dist/sdk/index.js",
+      "types": "./dist/sdk/index.d.ts"
+    },
+    "./sdk/*": {
+      "import": "./dist/sdk/*.js",
+      "types": "./dist/sdk/*.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "nitro build",
+    "build-sdk": "tsc --project tsconfig.sdk.json",
     "dev": "nitro dev",
     "prepare": "nitro prepare",
     "preview": "node .output/server/index.mjs",

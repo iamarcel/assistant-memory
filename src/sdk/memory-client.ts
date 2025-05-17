@@ -1,49 +1,49 @@
-import { z } from "zod";
-import {
-  IngestConversationRequest,
-  IngestConversationResponse,
-  ingestConversationResponseSchema,
-} from "~/lib/schemas/ingest-conversation";
-import {
-  IngestDocumentRequest,
-  IngestDocumentResponse,
-  ingestDocumentResponseSchema,
-} from "~/lib/schemas/ingest-document-request";
-import {
-  QueryAtlasRequest,
-  QueryAtlasResponse,
-  queryAtlasResponseSchema,
-} from "~/lib/schemas/query-atlas";
-import {
-  QueryDayRequest,
-  QueryDayResponse,
-  queryDayResponseSchema,
-} from "~/lib/schemas/query-day";
-import {
-  QueryNodeTypeRequest,
-  QueryNodeTypeResponse,
-  queryNodeTypeResponseSchema,
-} from "~/lib/schemas/query-node-type";
-import {
-  QuerySearchRequest,
-  QuerySearchResponse,
-  querySearchResponseSchema,
-} from "~/lib/schemas/query-search";
-import {
-  SummarizeRequest,
-  SummarizeResponse,
-  summarizeResponseSchema,
-} from "~/lib/schemas/summarize";
 import {
   CleanupRequest,
   CleanupResponse,
   cleanupResponseSchema,
-} from "~/lib/schemas/cleanup";
+} from "../lib/schemas/cleanup.js";
 import {
   DreamRequest,
   DreamResponse,
   dreamResponseSchema,
-} from "~/lib/schemas/dream";
+} from "../lib/schemas/dream.js";
+import {
+  IngestConversationRequest,
+  IngestConversationResponse,
+  ingestConversationResponseSchema,
+} from "../lib/schemas/ingest-conversation.js";
+import {
+  IngestDocumentRequest,
+  IngestDocumentResponse,
+  ingestDocumentResponseSchema,
+} from "../lib/schemas/ingest-document-request.js";
+import {
+  QueryAtlasRequest,
+  QueryAtlasResponse,
+  queryAtlasResponseSchema,
+} from "../lib/schemas/query-atlas.js";
+import {
+  QueryDayRequest,
+  QueryDayResponse,
+  queryDayResponseSchema,
+} from "../lib/schemas/query-day.js";
+import {
+  QueryNodeTypeRequest,
+  QueryNodeTypeResponse,
+  queryNodeTypeResponseSchema,
+} from "../lib/schemas/query-node-type.js";
+import {
+  QuerySearchRequest,
+  QuerySearchResponse,
+  querySearchResponseSchema,
+} from "../lib/schemas/query-search.js";
+import {
+  SummarizeRequest,
+  SummarizeResponse,
+  summarizeResponseSchema,
+} from "../lib/schemas/summarize.js";
+import { z } from "zod";
 
 export interface MemoryClientOptions {
   baseUrl: string;
@@ -106,7 +106,7 @@ export class MemoryClient {
   ): Promise<IngestDocumentResponse> {
     return this._fetch(
       "POST",
-      "/api/ingest/document",
+      "/ingest/document",
       ingestDocumentResponseSchema,
       payload,
     );
@@ -117,7 +117,7 @@ export class MemoryClient {
   ): Promise<IngestConversationResponse> {
     return this._fetch(
       "POST",
-      "/api/ingest/conversation",
+      "/ingest/conversation",
       ingestConversationResponseSchema,
       payload,
     );
@@ -126,7 +126,7 @@ export class MemoryClient {
   async querySearch(payload: QuerySearchRequest): Promise<QuerySearchResponse> {
     return this._fetch(
       "POST",
-      "/api/query/search",
+      "/query/search",
       querySearchResponseSchema,
       payload,
     );
@@ -135,19 +135,14 @@ export class MemoryClient {
   async queryAtlas(payload: QueryAtlasRequest): Promise<QueryAtlasResponse> {
     return this._fetch(
       "POST",
-      "/api/query/atlas",
+      "/query/atlas",
       queryAtlasResponseSchema,
       payload,
     );
   }
 
   async queryDay(payload: QueryDayRequest): Promise<QueryDayResponse> {
-    return this._fetch(
-      "POST",
-      "/api/query/day",
-      queryDayResponseSchema,
-      payload,
-    );
+    return this._fetch("POST", "/query/day", queryDayResponseSchema, payload);
   }
 
   async queryNodeType(
@@ -155,36 +150,21 @@ export class MemoryClient {
   ): Promise<QueryNodeTypeResponse> {
     return this._fetch(
       "POST",
-      "/api/query/node-type",
+      "/query/node-type",
       queryNodeTypeResponseSchema,
       payload,
     );
   }
 
   async summarize(payload: SummarizeRequest): Promise<SummarizeResponse> {
-    return this._fetch(
-      "POST",
-      "/api/summarize",
-      summarizeResponseSchema,
-      payload,
-    );
+    return this._fetch("POST", "/summarize", summarizeResponseSchema, payload);
   }
 
   async cleanup(payload: CleanupRequest): Promise<CleanupResponse> {
-    return this._fetch(
-      "POST",
-      "/api/cleanup",
-      cleanupResponseSchema,
-      payload,
-    );
+    return this._fetch("POST", "/cleanup", cleanupResponseSchema, payload);
   }
 
   async dream(payload: DreamRequest): Promise<DreamResponse> {
-    return this._fetch(
-      "POST",
-      "/api/dream",
-      dreamResponseSchema,
-      payload,
-    );
+    return this._fetch("POST", "/dream", dreamResponseSchema, payload);
   }
 }

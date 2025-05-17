@@ -1,5 +1,5 @@
+import { typeIdSchema } from "../../types/typeid.js";
 import { z } from "zod";
-import { typeIdSchema } from "~/types/typeid";
 
 // Define the request schema
 export const querySearchRequestSchema = z.object({

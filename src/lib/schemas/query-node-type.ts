@@ -1,6 +1,6 @@
+import { NodeTypeEnum } from "../../types/graph.js";
+import { typeIdSchema } from "../../types/typeid.js";
 import { z } from "zod";
-import { NodeTypeEnum } from "~/types/graph";
-import { typeIdSchema } from "~/types/typeid";
 
 export const queryNodeTypeRequestSchema = z.object({
   userId: z.string(),

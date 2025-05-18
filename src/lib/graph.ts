@@ -8,6 +8,7 @@ import {
   inArray,
   isNotNull,
   not,
+  notInArray,
 } from "drizzle-orm";
 import { DrizzleDB } from "~/db";
 import { nodes, nodeMetadata, nodeEmbeddings, edges } from "~/db/schema";
@@ -62,6 +63,8 @@ export interface FindSimilarNodesOptions {
   limit?: number;
   /** Minimum similarity score (0-1) filter */
   similarityThreshold?: number;
+  /** Optional list of node types to exclude from the search results */
+  excludeNodeTypes?: NodeType[];
 }
 
 // Internal helper to get an embedding
@@ -81,19 +84,27 @@ async function generateTextEmbedding(text: string): Promise<number[]> {
 export async function findSimilarNodes(
   opts: FindSimilarNodesOptions,
 ): Promise<NodeSearchResult[]> {
-  const { userId, text, limit = 10, similarityThreshold } = opts;
+  const { userId, text, limit = 10, similarityThreshold, excludeNodeTypes } = opts;
   const emb = await generateTextEmbedding(text);
   const similarity = sql<number>`1 - (${cosineDistance(nodeEmbeddings.embedding, emb)})`;
   const db = await useDatabase();
-  // Combine base and optional threshold conditions
-  const baseCondition = and(
+
+  // Base conditions
+  let whereCondition = and(
     eq(nodes.userId, userId),
     sql`${similarity} IS NOT NULL`,
   );
-  const whereCondition =
-    similarityThreshold != null
-      ? and(baseCondition, sql`${similarity} >= ${similarityThreshold}`)
-      : baseCondition;
+
+  // Optional similarity threshold condition
+  if (similarityThreshold != null) {
+    whereCondition = and(whereCondition, sql`${similarity} >= ${similarityThreshold}`);
+  }
+
+  // Optional exclude node types condition
+  if (excludeNodeTypes && excludeNodeTypes.length > 0) {
+    whereCondition = and(whereCondition, notInArray(nodes.nodeType, excludeNodeTypes));
+  }
+
   return db
     .select({
       id: nodes.id,

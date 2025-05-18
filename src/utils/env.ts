@@ -29,6 +29,9 @@ const envSchema = z.object({
     .boolean()
     .default(false)
     .describe("Enable debug logging"),
+
+  DREAM_PROBABILITY: z.coerce.number().default(0.1),
+  DREAM_SELECTION_PROBABILITY: z.coerce.number().default(0.4),
 });
 
 export const env = envSchema.parse(process.env);

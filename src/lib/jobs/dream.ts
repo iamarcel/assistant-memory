@@ -21,15 +21,18 @@ export type DreamJobData = z.infer<typeof DreamJobDataSchema>;
 // High-level dream workflow
 export async function dream(data: DreamJobData): Promise<void> {
   const { userId, assistantDescription } = data;
+  if (Math.random() > env.DREAM_PROBABILITY) return;
+
   const db = await useDatabase();
   const date = formatISO(addDays(new Date(), -1), { representation: "date" });
   const dayNode = await fetchDayNode(db, date);
   if (!dayNode) return;
+
   const topics = await proposeTopics(userId, date, assistantDescription);
   await Promise.all(
-    topics.map((t) =>
-      handleTopic(db, userId, assistantDescription, dayNode.id, t),
-    ),
+    topics
+      .filter(() => Math.random() < env.DREAM_SELECTION_PROBABILITY)
+      .map((t) => handleTopic(db, userId, assistantDescription, dayNode.id, t)),
   );
 }
 

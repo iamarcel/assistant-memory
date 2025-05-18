@@ -4,17 +4,16 @@ import {
   processSearchResultsWithConnections,
   formatAsMarkdown,
 } from "~/lib/graph";
-import { useDatabase } from "~/utils/db";
 import {
   querySearchRequestSchema,
   querySearchResponseSchema,
 } from "~/lib/schemas/query-search";
+import { useDatabase } from "~/utils/db";
 
 export default defineEventHandler(async (event) => {
   // Parse the request
-  const { userId, query, limit } = querySearchRequestSchema.parse(
-    await readBody(event),
-  );
+  const { userId, query, limit, excludeNodeTypes } =
+    querySearchRequestSchema.parse(await readBody(event));
   const db = await useDatabase();
 
   // Find similar nodes based on embedding similarity
@@ -22,6 +21,7 @@ export default defineEventHandler(async (event) => {
     userId,
     text: query,
     limit,
+    excludeNodeTypes,
   });
 
   // Get the IDs of the direct matches
@@ -40,11 +40,7 @@ export default defineEventHandler(async (event) => {
     processSearchResultsWithConnections(similarNodes, oneHopConnections);
 
   // Format the results as a nice string
-  const formattedResult = formatAsMarkdown(
-    query,
-    allNodes,
-    directMatches,
-  );
+  const formattedResult = formatAsMarkdown(query, allNodes, directMatches);
 
   return querySearchResponseSchema.parse({
     query,

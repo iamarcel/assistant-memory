@@ -44,24 +44,9 @@ export default defineEventHandler(async (event) => {
     }),
   ]);
 
-  // Sort by similarity in descending order
-  const similarities = [
-    ...similarNodes.map((n) => n.similarity),
-    ...similarEdges.map((e) => e.similarity),
-  ].sort((a, b) => b - a);
-
-  const minSimilarity =
-    similarities.length > 0
-      ? similarities[Math.min(limit - 1, similarities.length - 1)]!
-      : 0;
-
   const nodeIds = new Set([
-    ...similarNodes
-      .filter((node) => node.similarity >= minSimilarity)
-      .map((node) => node.id),
-    ...similarEdges
-      .filter((edge) => edge.similarity >= minSimilarity)
-      .flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]),
+    ...similarNodes.map((node) => node.id),
+    ...similarEdges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]),
   ]);
 
   const connections = await findOneHopNodes(db, userId, Array.from(nodeIds));
@@ -71,11 +56,11 @@ export default defineEventHandler(async (event) => {
     query,
     {
       similarNodes: {
-        items: similarNodes.filter((n) => n.similarity >= minSimilarity),
+        items: similarNodes,
         toDocument: (n) => `${n.label}: ${n.description}`,
       },
       similarEdges: {
-        items: similarEdges.filter((e) => e.similarity >= minSimilarity),
+        items: similarEdges,
         toDocument: (e) =>
           `${e.sourceLabel ?? ""} -> ${e.targetLabel ?? ""}: ${e.edgeType}` +
           (e.description ? `: ${e.description}` : ""),

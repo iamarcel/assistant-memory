@@ -70,7 +70,15 @@ For each element, create a node with:
 - A unique temporary ID (format: "temp_[type]_[number]", e.g., "temp_person_1")
 - The appropriate node type
 - A concise label (name/title)
-- A brief description providing context
+- A brief description providing context (optional)
+
+Rules of the graph:
+- Nodes are unique by type and label
+- Edges are unique by source node, target node, and edge type
+- Never create new nodes for a node that already exists
+- In node names use full names, eg. "John Doe" instead of "John"
+- Omit unnecessary details in node names, eg. "John Doe" instead of "John Doe (person)"
+- Nodes are independent of context and represent a *single* thing. Bad example: "John - the person taking a walk". Good example: "John" (Person node, no description) linked to [PARTICIPATED_IN] "John's walk on 2025-05-18" (Event node), linked to [OCCURRED_ON] "2025-05-18" (Temporal node).
 
 ${
   existingNodes.length > 0

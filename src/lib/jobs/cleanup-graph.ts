@@ -1,6 +1,6 @@
 import { createCompletionClient } from "../ai";
 import { generateAndInsertNodeEmbeddings } from "../embeddings-util";
-import { findSimilarNodes, findOneHopConnections } from "../search";
+import { findOneHopNodes, findSimilarNodes } from "../graph";
 import { TemporaryIdMapper } from "../temporary-id-mapper";
 import { sql, eq, gte, desc, and, inArray } from "drizzle-orm";
 import { zodResponseFormat } from "openai/helpers/zod.mjs";
@@ -45,6 +45,7 @@ export interface GraphEdge {
   source: TypeId<"node">;
   target: TypeId<"node">;
   type: EdgeType;
+  description?: string;
 }
 export interface Subgraph {
   nodes: GraphNode[];
@@ -61,6 +62,7 @@ export interface TempEdge {
   sourceTemp: string;
   targetTemp: string;
   type: EdgeType;
+  description: string;
 }
 export interface TempSubgraph {
   nodes: TempNode[];
@@ -240,7 +242,7 @@ async function buildSubgraph(
         userId,
         text: `${seed.label}: ${seed.description}`,
         limit: semanticLimit,
-        similarityThreshold: 0.5,
+        minimumSimilarity: 0.5,
       }),
     ),
   );
@@ -260,22 +262,23 @@ async function buildSubgraph(
   // Expand connections
   let currentIds = Array.from(nodeMap.keys());
   for (let hop = 1; hop <= hopDepth; hop++) {
-    const conns = await findOneHopConnections(db, userId, currentIds);
+    const conns = await findOneHopNodes(db, userId, currentIds);
     const nextIds: typeof currentIds = [];
     for (const c of conns) {
-      if (!nodeMap.has(c.nodeId)) {
-        nodeMap.set(c.nodeId, {
-          id: c.nodeId,
+      if (!nodeMap.has(c.id)) {
+        nodeMap.set(c.id, {
+          id: c.id,
           label: c.label ?? "",
           description: c.description ?? "",
-          type: c.nodeType,
+          type: c.type,
         });
-        nextIds.push(c.nodeId);
+        nextIds.push(c.id);
       }
       edgesList.push({
-        source: c.sourceId,
-        target: c.targetId,
+        source: c.edgeSourceId,
+        target: c.edgeTargetId,
         type: c.edgeType,
+        description: c.description ?? "",
       });
     }
     currentIds = nextIds;
@@ -318,6 +321,7 @@ function toTempSubgraph(sub: Subgraph): {
       sourceTemp: mapper.getId(src)!,
       targetTemp: mapper.getId(tgt)!,
       type: e.type,
+      description: e.description ?? "",
     };
   });
   return { tempSubgraph: { nodes: tempNodes, edges: tempEdges }, mapper };
@@ -341,7 +345,7 @@ async function proposeGraphCleanup(
   const edgesList = temp.edges
     .map(
       (e) =>
-        `<edge source="${e.sourceTemp}" target="${e.targetTemp}" type="${e.type}"></edge>`,
+        `<edge source="${e.sourceTemp}" target="${e.targetTemp}" type="${e.type}">${e.description}</edge>`,
     )
     .join("\n");
   const prompt = `You are a graph cleaning assistant. Given this subgraph, propose merges (pairs of temp IDs to merge), deletes (temp IDs to remove), additions (new edges), and any new nodes.

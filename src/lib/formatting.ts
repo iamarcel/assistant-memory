@@ -1,6 +1,11 @@
 import { formatISO } from "date-fns";
-import type { NodeWithConnections } from "~/lib/graph";
-import { TypeId } from "~/types/typeid";
+import type {
+  NodeWithConnections,
+  NodeSearchResult,
+  EdgeSearchResult,
+  OneHopNode,
+} from "~/lib/graph";
+import type { RerankResult } from "~/lib/rerank";
 
 interface Message {
   content: string;
@@ -38,11 +43,12 @@ function escapeXml(str: string): string {
  */
 export function formatNodesForPrompt(
   existingNodes: Array<{
-    id: TypeId<"node">;
+    id: string;
     type: string;
     label: string | null;
     description?: string | null;
     tempId: string;
+    timestamp: string;
   }>,
 ): string {
   if (existingNodes.length === 0) {
@@ -52,8 +58,8 @@ export function formatNodesForPrompt(
   const xmlItems = existingNodes
     .map(
       (node) =>
-        `<node id="${escapeXml(node.tempId)}" type="${escapeXml(node.type)}">
-  <label>${escapeXml(node.label ?? "")}</label>
+        `<node id="${escapeXml(node.tempId)}" type="${escapeXml(node.type)}" timestamp="${node.timestamp}">
+  <label>${node.label ?? ""}</label>
   <description>${node.description || ""}</description>
 </node>`,
     )
@@ -99,7 +105,7 @@ export function formatAsMarkdown(
   result += `Found ${directMatches.length} direct matches:\n`;
   directMatches.forEach((node, index) => {
     const similarityPercentage = Math.round((node.similarity ?? 0) * 100);
-    result += `${index + 1}. ${node.label} (${node.type}, ${similarityPercentage}% match)\n`;
+    result += `${index + 1}. ${node.label} (${node.type}, ${node.timestamp.toISOString()}, ${similarityPercentage}% match)\n`;
     if (node.description) {
       result += `   ${node.description}\n`;
     }
@@ -114,7 +120,7 @@ export function formatAsMarkdown(
   if (connectedNodes.length > 0) {
     result += `\nRelated nodes (one hop away):\n`;
     connectedNodes.forEach((node, index) => {
-      result += `${index + 1}. ${node.label} (${node.type})\n`;
+      result += `${index + 1}. ${node.label} (${node.type}, ${node.timestamp.toISOString()})\n`;
       if (node.description) {
         result += `   ${node.description}\n`;
       }
@@ -130,4 +136,62 @@ export function formatAsMarkdown(
     });
   }
   return result;
+}
+
+// Group definitions for reranked search results
+type SearchGroups = {
+  similarNodes: NodeSearchResult;
+  similarEdges: EdgeSearchResult;
+  connections: OneHopNode;
+};
+
+/**
+ * Strongly-typed alias for reranked search results.
+ */
+export type SearchResults = RerankResult<SearchGroups>;
+
+// Helpers for formatting individual result items
+function formatSearchNode(node: NodeSearchResult): string {
+  return `<node type="${escapeXml(node.type)}" timestamp="${formatISO(node.timestamp)}">
+  <label>${node.label ?? ""}</label>
+  <description>${node.description ?? ""}</description>
+</node>`;
+}
+
+function formatSearchEdge(edge: EdgeSearchResult): string {
+  return `<edge from="${escapeXml(edge.sourceLabel ?? "")}" to="${escapeXml(
+    edge.targetLabel ?? "",
+  )}" type="${escapeXml(edge.edgeType)}" timestamp="${formatISO(edge.timestamp)}">
+  <description>${escapeXml(edge.description ?? "")}</description>
+</edge>`;
+}
+
+function formatSearchConnection(conn: OneHopNode): string {
+  return `<edge from="${escapeXml(conn.sourceLabel ?? "")}" to="${escapeXml(
+    conn.targetLabel ?? "",
+  )}" type="${escapeXml(conn.edgeType)}" timestamp="${formatISO(conn.timestamp)}">
+  <description>${conn.description ?? ""}</description>
+</edge>`;
+}
+
+/**
+ * Formats reranked search results as an XML-like structure for LLM prompts.
+ * Items are ordered by descending relevance and tagged by their group.
+ */
+export function formatSearchResultsAsXml(results: SearchResults): string {
+  const body = results.length
+    ? results
+        .map((r) => {
+          switch (r.group) {
+            case "similarNodes":
+              return formatSearchNode(r.item);
+            case "similarEdges":
+              return formatSearchEdge(r.item);
+            case "connections":
+              return formatSearchConnection(r.item);
+          }
+        })
+        .join("\n")
+    : "";
+  return body;
 }

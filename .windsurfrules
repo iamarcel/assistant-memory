@@ -24,6 +24,16 @@ Write all database queries Drizzle-native. Don't write SQL queries.
 
 When solving problems, implement the solution in the smallest possible way. Don't over-engineer. Implement the obvious, elegant solution. Refactoring is allowed if it makes the final solution much better, and preferred over overly complicating things to twist yourself into a corner.
 
+Don't assign variables when they're only used once.
+
+Don't check for non-empty arrays if the rest of the code already handles that case (eg., map on an empty array is perfectly fine).
+
+Avoid mapping, instead try to make types compatible, defining minimal input interfaces that are compatible with more detailed input variables.
+
+Do not use generic function names like "process" because it's not clear what the function does without reading it.
+
+When implementing filtering or limiting logic, always work with the minimal data needed. If you only need a property (like a score) for comparison, extract just that property first instead of mapping entire objects. Keep intermediate data structures as simple as possible - use primitive arrays when you only need primitive values. The simplest solution that correctly solves the problem is usually the best.
+
 ## Data Structure
 
 - We use Drizzle and PostgreSQL with the pgvector extension
@@ -31,6 +41,8 @@ When solving problems, implement the solution in the smallest possible way. Don'
 - Don't create migrations—the drizzle-kit CLI will handle that for us
 
 Nodes, edges etc. are user-scoped so always ensure we're not accidentally touching data that belongs to other users.
+
+Most identifiers in the datbase are TypeId's. These are statically checked so we can ensure we're inserting the right _type_ of id, not just any random string. This is done using the functionality from `~/types/typeid.js`. You will need to statically ensure we're working with the correct type of id, by typing it explicitly and using the `typeIdSchema(type)` function to validate it with Zod.
 
 ## Typescript best practices
 
@@ -45,3 +57,13 @@ Nodes, edges etc. are user-scoped so always ensure we're not accidentally touchi
 Don't try-catch unless absolutely necessary, it makes code hard to read and too long. We prefer to let errors propagate all the way to the endpoint, this way it's easier to debug and we can handle it where it usually needs to be handled: at the user side.
 
 Validate data coming in to the server and API.
+
+## Clean, DRY, KISS, beautiful code
+
+Code should be easy to read and maintain.
+
+Split up logical blocks in self-contained methods and functions.
+
+Before implementing new functionality, scan the existing code for similar patterns and try to reuse existing code. If the existing code can be refactored and generalized so it's still independent but can be used for the new functionality, do so.
+
+Consistency with the existing codebase is very important.

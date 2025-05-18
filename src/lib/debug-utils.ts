@@ -12,8 +12,18 @@ export function debug(...args: unknown[]) {
  * Pretty-print nodes and edges for debugging.
  */
 export function debugGraph<
-  N extends { id: unknown; label: string; description?: string | undefined; nodeType: unknown },
-  E extends { sourceNodeId: unknown; targetNodeId: unknown; edgeType: unknown },
+  N extends {
+    id: unknown;
+    label: string;
+    description?: string | undefined;
+    nodeType: unknown;
+  },
+  E extends {
+    sourceNodeId: unknown;
+    targetNodeId: unknown;
+    edgeType: unknown;
+    description?: string | undefined | null;
+  },
 >(nodes: N[], edges: E[]) {
   if (!env.DEBUG_LOGS) return;
   console.group("🪵 Debug Graph 🔍");
@@ -27,7 +37,7 @@ export function debugGraph<
   console.group("Edges");
   edges.forEach((e) =>
     console.log(
-      `• ${e.sourceNodeId} → ${e.targetNodeId} (${e.edgeType})`,
+      `• ${e.sourceNodeId} → ${e.targetNodeId} (${e.edgeType}): ${e.description}`,
     ),
   );
   console.groupEnd();

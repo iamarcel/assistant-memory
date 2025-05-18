@@ -9,65 +9,96 @@ import {
   isNotNull,
   not,
   notInArray,
+  aliasedTable,
 } from "drizzle-orm";
 import { DrizzleDB } from "~/db";
-import { nodes, nodeMetadata, nodeEmbeddings, edges } from "~/db/schema";
+import {
+  nodes,
+  nodeMetadata,
+  nodeEmbeddings,
+  edges,
+  edgeEmbeddings,
+} from "~/db/schema";
 import { generateEmbeddings } from "~/lib/embeddings";
-import { formatAsMarkdown } from "~/lib/formatting";
 import { type NodeType, type EdgeType, NodeTypeEnum } from "~/types/graph";
 import type { TypeId } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
 
 /** Node metadata with similarity */
-export interface NodeSearchResult {
-  id: TypeId<"node">;
-  type: NodeType;
-  label: string | null;
-  description: string | null;
+interface SearchResultBase {
   similarity: number;
 }
 
-/** One-hop edge plus neighbor metadata */
-export interface ConnectionRecord {
-  sourceId: TypeId<"node">;
-  targetId: TypeId<"node">;
-  edgeType: EdgeType;
-  nodeId: TypeId<"node">;
-  nodeType: NodeType;
+export interface NodeSearchResult extends SearchResultBase {
+  id: TypeId<"node">;
+  type: NodeType;
   label: string | null;
+  timestamp: Date;
   description: string | null;
 }
 
+/** One-hop edge plus neighbor metadata */
+export interface OneHopNode {
+  id: TypeId<"node">;
+  type: NodeType;
+  timestamp: Date;
+  label: string | null;
+  description: string | null;
+
+  edgeSourceId: TypeId<"node">;
+  edgeTargetId: TypeId<"node">;
+  edgeType: EdgeType;
+  sourceLabel: string | null;
+  targetLabel: string | null;
+}
+
 /** Node enriched with connections */
-export interface NodeWithConnections {
+export interface NodeWithConnections extends SearchResultBase {
   id: TypeId<"node">;
   type: NodeType;
   label: string;
   description: string | null;
-  similarity?: number;
+  timestamp: Date;
   isDirectMatch?: boolean;
   connectedTo?: TypeId<"node">[];
 }
 
-/** Combined search and graph results */
-export interface GraphResults {
-  directMatches: NodeWithConnections[];
-  connectedNodes: NodeWithConnections[];
-  allNodes: NodeWithConnections[];
-}
+export type SimilaritySearchBase = (
+  | {
+      embedding: number[];
+    }
+  | {
+      text: string;
+    }
+) & {
+  /** Minimum similarity score (0-1) filter */
+  minimumSimilarity?: number;
+  limit?: number;
+  userId: string;
+};
 
 /** Options for semantic search */
-export interface FindSimilarNodesOptions {
-  userId: string;
-  text: string;
-  limit?: number;
-  /** Minimum similarity score (0-1) filter */
-  similarityThreshold?: number;
+export type FindSimilarNodesOptions = SimilaritySearchBase & {
   /** Optional list of node types to exclude from the search results */
   excludeNodeTypes?: NodeType[];
+};
+
+/** Options for semantic search on edges */
+export type FindSimilarEdgesOptions = SimilaritySearchBase;
+
+/** Edge metadata with similarity */
+export interface EdgeSearchResult {
+  id: TypeId<"edge">;
+  sourceNodeId: TypeId<"node">;
+  targetNodeId: TypeId<"node">;
+  sourceLabel: string | null;
+  targetLabel: string | null;
+  edgeType: EdgeType;
+  description: string | null;
+  similarity: number;
+  timestamp: Date;
 }
 
-// Internal helper to get an embedding
 async function generateTextEmbedding(text: string): Promise<number[]> {
   const res = await generateEmbeddings({
     model: "jina-embeddings-v3",
@@ -84,8 +115,12 @@ async function generateTextEmbedding(text: string): Promise<number[]> {
 export async function findSimilarNodes(
   opts: FindSimilarNodesOptions,
 ): Promise<NodeSearchResult[]> {
-  const { userId, text, limit = 10, similarityThreshold, excludeNodeTypes } = opts;
-  const emb = await generateTextEmbedding(text);
+  const { userId, limit = 10, minimumSimilarity, excludeNodeTypes } = opts;
+
+  const emb =
+    "embedding" in opts
+      ? opts.embedding
+      : await generateTextEmbedding(opts.text);
   const similarity = sql<number>`1 - (${cosineDistance(nodeEmbeddings.embedding, emb)})`;
   const db = await useDatabase();
 
@@ -96,13 +131,19 @@ export async function findSimilarNodes(
   );
 
   // Optional similarity threshold condition
-  if (similarityThreshold != null) {
-    whereCondition = and(whereCondition, sql`${similarity} >= ${similarityThreshold}`);
+  if (minimumSimilarity != null) {
+    whereCondition = and(
+      whereCondition,
+      sql`${similarity} >= ${minimumSimilarity}`,
+    );
   }
 
   // Optional exclude node types condition
   if (excludeNodeTypes && excludeNodeTypes.length > 0) {
-    whereCondition = and(whereCondition, notInArray(nodes.nodeType, excludeNodeTypes));
+    whereCondition = and(
+      whereCondition,
+      notInArray(nodes.nodeType, excludeNodeTypes),
+    );
   }
 
   return db
@@ -111,6 +152,7 @@ export async function findSimilarNodes(
       type: nodes.nodeType,
       label: nodeMetadata.label,
       description: nodeMetadata.description,
+      timestamp: nodes.createdAt,
       similarity,
     })
     .from(nodeEmbeddings)
@@ -121,13 +163,66 @@ export async function findSimilarNodes(
     .limit(limit);
 }
 
+/** Semantic search for edges via embeddings */
+export async function findSimilarEdges(
+  opts: FindSimilarEdgesOptions,
+): Promise<EdgeSearchResult[]> {
+  const { userId, limit = 10, minimumSimilarity } = opts;
+
+  const emb =
+    "embedding" in opts
+      ? opts.embedding
+      : await generateTextEmbedding(opts.text);
+  const similarity = sql<number>`1 - (${cosineDistance(edgeEmbeddings.embedding, emb)})`;
+  const db = await useDatabase();
+
+  // Base conditions
+  let whereCondition = and(
+    eq(edges.userId, userId),
+    sql`${similarity} IS NOT NULL`,
+  );
+
+  // Optional similarity threshold condition
+  if (minimumSimilarity != null) {
+    whereCondition = and(
+      whereCondition,
+      sql`${similarity} >= ${minimumSimilarity}`,
+    );
+  }
+
+  const fromNodeMetadata = aliasedTable(nodeMetadata, "fromNodeMetadata");
+  const targetNodeMetadata = aliasedTable(nodeMetadata, "targetNodeMetadata");
+
+  return db
+    .select({
+      id: edges.id,
+      sourceNodeId: edges.sourceNodeId,
+      targetNodeId: edges.targetNodeId,
+      sourceLabel: fromNodeMetadata.label,
+      targetLabel: targetNodeMetadata.label,
+      edgeType: edges.edgeType,
+      description: edges.description,
+      similarity,
+      timestamp: edges.createdAt,
+    })
+    .from(edgeEmbeddings)
+    .innerJoin(edges, eq(edgeEmbeddings.edgeId, edges.id))
+    .leftJoin(fromNodeMetadata, eq(fromNodeMetadata.nodeId, edges.sourceNodeId))
+    .leftJoin(
+      targetNodeMetadata,
+      eq(targetNodeMetadata.nodeId, edges.targetNodeId),
+    )
+    .where(whereCondition)
+    .orderBy(desc(similarity))
+    .limit(limit);
+}
+
 /** One-hop neighbor lookup */
-export async function findOneHopConnections(
+export async function findOneHopNodes(
   db: DrizzleDB,
   userId: string,
   nodeIds: TypeId<"node">[],
-  onlyWithLabels = true,
-): Promise<ConnectionRecord[]> {
+): Promise<OneHopNode[]> {
   if (nodeIds.length === 0) return [];
   const sub = db
     .select({
@@ -152,70 +247,32 @@ export async function findOneHopConnections(
     )
     .as("e");
 
+  // alias metadata for source/target labels
+  const srcMeta = aliasedTable(nodeMetadata, "srcMeta");
+  const tgtMeta = aliasedTable(nodeMetadata, "tgtMeta");
+
   return db
     .selectDistinctOn([nodes.id], {
-      sourceId: sub.sourceId,
-      targetId: sub.targetId,
-      edgeType: sub.edgeType,
-      nodeId: nodes.id,
-      nodeType: nodes.nodeType,
+      id: nodes.id,
+      type: nodes.nodeType,
       label: nodeMetadata.label,
       description: nodeMetadata.description,
+      timestamp: nodes.createdAt,
+
+      edgeType: sub.edgeType,
+      edgeSourceId: sub.sourceId,
+      edgeTargetId: sub.targetId,
+      sourceLabel: srcMeta.label,
+      targetLabel: tgtMeta.label,
     })
     .from(sub)
     .innerJoin(nodes, eq(nodes.id, sub.nodeId))
     .innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodes.id))
-    .where(
-      and(
-        not(inArray(nodes.id, nodeIds)),
-        onlyWithLabels ? isNotNull(nodeMetadata.label) : undefined,
-      ),
-    )
+    .leftJoin(srcMeta, eq(srcMeta.nodeId, sub.sourceId))
+    .leftJoin(tgtMeta, eq(tgtMeta.nodeId, sub.targetId))
+    .where(and(not(inArray(nodes.id, nodeIds)), isNotNull(nodeMetadata.label)))
     .orderBy(nodes.id)
     .limit(50);
-}
-
-/** Merge matches and neighbors */
-export function processSearchResultsWithConnections(
-  direct: NodeSearchResult[],
-  neighbors: ConnectionRecord[],
-): GraphResults {
-  const directMatches: NodeWithConnections[] = direct.map((n) => ({
-    id: n.id,
-    type: n.type,
-    label: n.label ?? "",
-    description: n.description,
-    similarity: n.similarity,
-    isDirectMatch: true,
-    connectedTo: [],
-  }));
-  const linkMap = new Map<TypeId<"node">, Set<TypeId<"node">>>();
-  directMatches.forEach((d) => linkMap.set(d.id, new Set()));
-  const connectedMap = new Map<TypeId<"node">, NodeWithConnections>();
-  for (const c of neighbors) {
-    const isSrc = linkMap.has(c.sourceId);
-    const src = isSrc ? c.sourceId : c.targetId;
-    const other = isSrc ? c.targetId : c.sourceId;
-    if (linkMap.has(other)) continue;
-    linkMap.get(src)!.add(other);
-    connectedMap.set(other, {
-      id: other,
-      type: c.nodeType,
-      label: c.label ?? "",
-      description: c.description,
-      isDirectMatch: false,
-      connectedTo: [src],
-    });
-  }
-  directMatches.forEach(
-    (d) => (d.connectedTo = Array.from(linkMap.get(d.id)!)),
-  );
-  const connectedNodes = Array.from(connectedMap.values());
-  return {
-    directMatches,
-    connectedNodes,
-    allNodes: [...directMatches, ...connectedNodes],
-  };
 }
 
 /** Helper to fetch the Temporal day node id for a given userId and date */
@@ -238,6 +295,3 @@ export async function findDayNode(
     .limit(1);
   return day?.id ?? null;
 }
-
-// Formatting helper
-export { formatAsMarkdown };

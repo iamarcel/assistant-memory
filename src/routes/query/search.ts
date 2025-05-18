@@ -1,11 +1,14 @@
+import { generateEmbeddings } from "~/lib/embeddings";
+import { formatSearchResultsAsXml } from "~/lib/formatting";
 import {
+  findOneHopNodes,
+  findSimilarEdges,
   findSimilarNodes,
-  findOneHopConnections,
-  processSearchResultsWithConnections,
-  formatAsMarkdown,
 } from "~/lib/graph";
+import { rerankMultiple } from "~/lib/rerank";
 import {
   querySearchRequestSchema,
+  QuerySearchResponse,
   querySearchResponseSchema,
 } from "~/lib/schemas/query-search";
 import { useDatabase } from "~/utils/db";
@@ -16,37 +19,77 @@ export default defineEventHandler(async (event) => {
     querySearchRequestSchema.parse(await readBody(event));
   const db = await useDatabase();
 
-  // Find similar nodes based on embedding similarity
-  const similarNodes = await findSimilarNodes({
-    userId,
-    text: query,
-    limit,
-    excludeNodeTypes,
+  const embeddingsResponse = await generateEmbeddings({
+    model: "jina-embeddings-v3",
+    task: "retrieval.query",
+    input: [query],
+    truncate: true,
   });
+  const embedding = embeddingsResponse.data[0]?.embedding;
+  if (!embedding) throw new Error("Failed to generate embedding");
 
-  // Get the IDs of the direct matches
-  const directMatchIds = similarNodes.map((node) => node.id);
+  const [similarNodes, similarEdges] = await Promise.all([
+    findSimilarNodes({
+      userId,
+      embedding,
+      limit,
+      excludeNodeTypes,
+      minimumSimilarity: 0.4,
+    }),
+    findSimilarEdges({
+      userId,
+      embedding,
+      limit,
+      minimumSimilarity: 0.4,
+    }),
+  ]);
 
-  // Find one-hop connections (nodes connected to the direct matches)
-  const oneHopConnections = await findOneHopConnections(
-    db,
-    userId,
-    directMatchIds,
-    true, // Only include nodes with labels
+  // Sort by similarity in descending order
+  const similarities = [
+    ...similarNodes.map((n) => n.similarity),
+    ...similarEdges.map((e) => e.similarity),
+  ].sort((a, b) => b - a);
+
+  const minSimilarity =
+    similarities.length > 0
+      ? similarities[Math.min(limit - 1, similarities.length - 1)]!
+      : 0;
+
+  const nodeIds = new Set([
+    ...similarNodes
+      .filter((node) => node.similarity >= minSimilarity)
+      .map((node) => node.id),
+    ...similarEdges
+      .filter((edge) => edge.similarity >= minSimilarity)
+      .flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]),
+  ]);
+
+  const connections = await findOneHopNodes(db, userId, Array.from(nodeIds));
+
+  // Run reranker so we know the top from the similar nodes, similar edges and connected nodes
+  const rerankedResults = await rerankMultiple(
+    query,
+    {
+      similarNodes: {
+        items: similarNodes.filter((n) => n.similarity >= minSimilarity),
+        toDocument: (n) => `${n.label}: ${n.description}`,
+      },
+      similarEdges: {
+        items: similarEdges.filter((e) => e.similarity >= minSimilarity),
+        toDocument: (e) =>
+          `${e.sourceLabel ?? ""} -> ${e.targetLabel ?? ""}: ${e.edgeType}` +
+          (e.description ? `: ${e.description}` : ""),
+      },
+      connections: {
+        items: connections,
+        toDocument: (c) => `${c.label}: ${c.description}`,
+      },
+    },
+    limit,
   );
-
-  // Process the results
-  const { directMatches, connectedNodes, allNodes } =
-    processSearchResultsWithConnections(similarNodes, oneHopConnections);
-
-  // Format the results as a nice string
-  const formattedResult = formatAsMarkdown(query, allNodes, directMatches);
 
   return querySearchResponseSchema.parse({
     query,
-    directMatches: directMatches.length,
-    connectedNodes: connectedNodes.length,
-    formattedResult,
-    nodes: allNodes,
-  });
+    formattedResult: formatSearchResultsAsXml(rerankedResults),
+  } satisfies QuerySearchResponse);
 });

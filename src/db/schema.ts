@@ -15,10 +15,6 @@ import { EdgeType, NodeType, SourceStatus, SourceType } from "~/types/graph";
 
 // --- Core Ontology & Structure ---
 
-// Optional: Define the allowed types for nodes and edges
-// pgTable('ontology_node_types', { ... name: string, description: string ... });
-// pgTable('ontology_edge_types', { ... name: string, description: string, allowed_source_types: string[], allowed_target_types: string[] ... });
-
 export const users = pgTable("users", {
   id: text().primaryKey().notNull(),
 });
@@ -97,6 +93,7 @@ export const edges = pgTable(
       .references(() => nodes.id, { onDelete: "cascade" })
       .notNull(),
     edgeType: varchar("edge_type", { length: 50 }).notNull().$type<EdgeType>(), // FK to ontology_edge_types if defined
+    description: text(), // Human-readable description of the edge
     // Optional: Metadata for the edge itself (e.g., confidence score, properties of the relationship)
     metadata: jsonb(),
     // Temporal aspect for relationships
@@ -106,7 +103,7 @@ export const edges = pgTable(
     // Indexes on (userId, sourceNodeId), (userId, targetNodeId), (userId, edgeType)
   },
   (table) => [
-    unique().on(table.sourceNodeId, table.targetNodeId),
+    unique().on(table.sourceNodeId, table.targetNodeId, table.edgeType),
     index("edges_user_id_source_node_id_idx").on(
       table.userId,
       table.sourceNodeId,
@@ -161,6 +158,33 @@ export const nodeEmbeddingsRelations = relations(nodeEmbeddings, ({ one }) => ({
   node: one(nodes, {
     fields: [nodeEmbeddings.nodeId],
     references: [nodes.id],
+  }),
+}));
+
+export const edgeEmbeddings = pgTable(
+  "edge_embeddings",
+  {
+    id: typeId("edge_embedding").primaryKey().notNull(),
+    edgeId: typeId("edge")
+      .references(() => edges.id, { onDelete: "cascade" })
+      .notNull(),
+    embedding: vector("embedding", { dimensions: 1024 }).notNull(), // Same dimension as node embeddings
+    modelName: varchar("model_name", { length: 100 }).notNull(),
+    createdAt: timestamp().defaultNow().notNull(),
+  },
+  (table) => [
+    index("edge_embeddings_embedding_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+    index("edge_embeddings_edge_id_idx").on(table.edgeId),
+  ],
+);
+
+export const edgeEmbeddingsRelations = relations(edgeEmbeddings, ({ one }) => ({
+  edge: one(edges, {
+    fields: [edgeEmbeddings.edgeId],
+    references: [edges.id],
   }),
 }));
 

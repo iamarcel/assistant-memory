@@ -1,5 +1,4 @@
 import { NodeTypeEnum } from "../../types/graph.js";
-import { typeIdSchema } from "../../types/typeid.js";
 import { z } from "zod";
 
 // Define the request schema
@@ -14,19 +13,7 @@ export const querySearchRequestSchema = z.object({
 
 export const querySearchResponseSchema = z.object({
   query: z.string(),
-  directMatches: z.number(),
-  connectedNodes: z.number(),
   formattedResult: z.string(),
-  nodes: z.array(
-    z.object({
-      id: typeIdSchema("node"),
-      type: z.string(),
-      label: z.string(),
-      description: z.string().optional().nullable(),
-      isDirectMatch: z.boolean().optional(),
-      connectedTo: z.array(typeIdSchema("node")).optional(),
-    }),
-  ),
 });
 
 export type QuerySearchRequest = z.infer<typeof querySearchRequestSchema>;

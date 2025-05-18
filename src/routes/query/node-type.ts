@@ -1,5 +1,5 @@
 import { defineEventHandler } from "h3";
-import { findDayNode, findOneHopConnections } from "~/lib/graph";
+import { findDayNode, findOneHopNodes } from "~/lib/graph";
 import {
   queryNodeTypeRequestSchema,
   queryNodeTypeResponseSchema,
@@ -23,22 +23,17 @@ export default defineEventHandler(async (event) => {
   }
 
   // Fetch one-hop connections (only nodes with labels)
-  const connections = await findOneHopConnections(
-    db,
-    userId,
-    [dayNodeId],
-    true,
-  );
+  const connections = await findOneHopNodes(db, userId, [dayNodeId]);
 
   // Filter by requested types
-  const filtered = connections.filter((rec) => types.includes(rec.nodeType));
+  const filtered = connections.filter((rec) => types.includes(rec.type));
 
   // Deduplicate by nodeId
   const uniqueMap = new Map<string, (typeof filtered)[0]>();
-  filtered.forEach((rec) => uniqueMap.set(rec.nodeId, rec));
+  filtered.forEach((rec) => uniqueMap.set(rec.id, rec));
   const uniqueRecords = Array.from(uniqueMap.values()).map((rec) => ({
-    id: rec.nodeId,
-    nodeType: rec.nodeType,
+    id: rec.id,
+    type: rec.type,
     metadata: { label: rec.label!, description: rec.description || undefined },
   }));
 
@@ -48,7 +43,7 @@ export default defineEventHandler(async (event) => {
     formattedResult = `# Nodes of types ${types.join(", ")} on ${date}\n\n`;
     const byType = uniqueRecords.reduce(
       (acc, n) => {
-        (acc[n.nodeType] = acc[n.nodeType] || []).push(n);
+        (acc[n.type] = acc[n.type] || []).push(n);
         return acc;
       },
       {} as Record<string, typeof uniqueRecords>,

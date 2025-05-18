@@ -91,6 +91,7 @@ async function handleTopic(
     label: n.label,
     description: n.description,
     tempId: n.id,
+    timestamp: n.timestamp.toISOString(),
   }));
   const context = formatNodesForPrompt(nodesForPrompt);
   const dream = await generateDreamContent(

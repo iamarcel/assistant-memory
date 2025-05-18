@@ -2,10 +2,7 @@ import { addDays } from "date-fns";
 import { defineEventHandler, readBody } from "h3";
 import { CleanupGraphParams } from "~/lib/jobs/cleanup-graph";
 import { batchQueue, DreamJobData, flowProducer } from "~/lib/queues";
-import {
-  dreamRequestSchema,
-  dreamResponseSchema,
-} from "~/lib/schemas/dream";
+import { dreamRequestSchema, dreamResponseSchema } from "~/lib/schemas/dream";
 
 export default defineEventHandler(async (event) => {
   const { userId, assistantId, assistantDescription } =
@@ -24,7 +21,7 @@ export default defineEventHandler(async (event) => {
           userId,
           since: addDays(new Date(), -1),
           entryNodeLimit: 5,
-          semanticNeighborLimit: 10,
+          semanticNeighborLimit: 15,
           graphHopDepth: 2,
           maxSubgraphNodes: 100,
           maxSubgraphEdges: 150,

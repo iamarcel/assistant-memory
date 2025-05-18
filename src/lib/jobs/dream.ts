@@ -143,7 +143,7 @@ async function retrieveRelevantNodes(
       userId,
       text: q,
       limit: 10,
-      similarityThreshold: 0.4,
+      minimumSimilarity: 0.4,
     });
     results.forEach((n) => map.set(n.id, n));
   }

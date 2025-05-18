@@ -1,6 +1,7 @@
 import { generateEmbeddings } from "./embeddings";
 import { DrizzleDB } from "~/db";
 import { nodeEmbeddings, edgeEmbeddings } from "~/db/schema";
+import type { EdgeType } from "~/types/graph";
 import { TypeId } from "~/types/typeid";
 
 export interface EmbeddableNode {
@@ -11,7 +12,7 @@ export interface EmbeddableNode {
 
 export interface EmbeddableEdge {
   edgeId: TypeId<"edge">;
-  edgeType: string;
+  edgeType: EdgeType;
   description?: string | null | undefined;
   sourceLabel: string;
   targetLabel: string;

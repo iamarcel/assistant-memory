@@ -1,5 +1,9 @@
 import { createCompletionClient } from "../ai";
-import { generateAndInsertNodeEmbeddings } from "../embeddings-util";
+import {
+  generateAndInsertNodeEmbeddings,
+  generateAndInsertEdgeEmbeddings,
+  type EmbeddableEdge,
+} from "../embeddings-util";
 import { findOneHopNodes, findSimilarNodes } from "../graph";
 import { TemporaryIdMapper } from "../temporary-id-mapper";
 import { sql, eq, gte, desc, and, inArray } from "drizzle-orm";
@@ -9,18 +13,22 @@ import { DrizzleDB } from "~/db";
 import { nodes, edges, nodeMetadata, sourceLinks } from "~/db/schema";
 import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
 import type { EdgeType, NodeType } from "~/types/graph";
-import { TypeId } from "~/types/typeid";
+import { TypeId, typeIdSchema } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
 
 export const CleanupGraphJobInputSchema = z.object({
   userId: z.string(),
   since: z.coerce.date(),
-  entryNodeLimit: z.number().int().positive().default(3),
-  semanticNeighborLimit: z.number().int().positive().default(10),
+  entryNodeLimit: z.number().int().positive().default(5),
+  semanticNeighborLimit: z.number().int().positive().default(15),
   graphHopDepth: z.union([z.literal(1), z.literal(2)]).default(2),
   maxSubgraphNodes: z.number().int().positive().default(100),
   maxSubgraphEdges: z.number().int().positive().default(150),
   llmModelId: z.string(),
+  seedIds: z
+    .array(typeIdSchema("node"))
+    .optional()
+    .describe("Optional manual seed node IDs"),
 });
 
 /**
@@ -93,6 +101,9 @@ export const CleanupProposalSchema = z.object({
         source: z.string().describe("Temp ID of source node"),
         target: z.string().describe("Temp ID of target node"),
         type: EdgeTypeEnum.describe("Type of edge"),
+        description: z
+          .string()
+          .describe("Concise description of the edge's meaning"),
       }),
     )
     .describe("New edges to add"),
@@ -143,37 +154,53 @@ export interface CleanupGraphResult {
 }
 
 /**
- * Orchestrator for graph cleanup
+ * Params for one cleanup iteration with explicit seeds
  */
-export async function cleanupGraph(
-  params: CleanupGraphParams,
-): Promise<CleanupGraphResult> {
-  const seedIds = await fetchEntryNodes(
-    params.userId,
-    params.since,
-    params.entryNodeLimit,
-  );
-  const sub = await buildSubgraph(
-    params.userId,
+export interface CleanupGraphIterationParams extends CleanupGraphParams {
+  seedIds: TypeId<"node">[];
+  /** Minimum nodes required in subgraph to proceed (default 5) */
+  minSubgraphNodes?: number;
+}
+
+/**
+ * Core single-iteration cleanup: builds subgraph from seedIds and applies LLM proposal
+ */
+export async function cleanupGraphIteration(
+  params: CleanupGraphIterationParams,
+): Promise<CleanupGraphResult | null> {
+  const {
+    userId,
     seedIds,
-    params.semanticNeighborLimit,
-    params.graphHopDepth,
-    params.maxSubgraphNodes,
-    params.maxSubgraphEdges,
+    semanticNeighborLimit,
+    graphHopDepth,
+    maxSubgraphNodes,
+    maxSubgraphEdges,
+    llmModelId,
+    minSubgraphNodes = 5,
+  } = params;
+  // 1. build subgraph from provided seeds
+  const sub = await buildSubgraph(
+    userId,
+    seedIds,
+    semanticNeighborLimit,
+    graphHopDepth,
+    maxSubgraphNodes,
+    maxSubgraphEdges,
   );
+  if (sub.nodes.length < minSubgraphNodes) {
+    console.debug(
+      `[cleanup-iter] Subgraph too small (${sub.nodes.length} < ${minSubgraphNodes}); skipping iteration`,
+    );
+    return null;
+  }
+  // 2. map to temporary IDs
   const { tempSubgraph, mapper } = toTempSubgraph(sub);
-  const proposal = await proposeGraphCleanup(
-    params.userId,
-    tempSubgraph,
-    params.llmModelId,
-  );
+  // 3. propose cleanup via LLM
+  const proposal = await proposeGraphCleanup(userId, tempSubgraph, llmModelId);
+  // 4. apply proposal to DB
   const db = await useDatabase();
-  const result = await applyCleanupProposal(
-    proposal,
-    mapper,
-    db,
-    params.userId,
-  );
+  const result = await applyCleanupProposal(proposal, mapper, db, userId);
+  // 5. log summary and return
   logCleanupSummary(params, result);
   return result;
 }
@@ -181,7 +208,7 @@ export async function cleanupGraph(
 /**
  * Step 1: select entry nodes
  */
-async function fetchEntryNodes(
+export async function fetchEntryNodes(
   userId: string,
   since: Date,
   limit: number,
@@ -348,7 +375,7 @@ async function proposeGraphCleanup(
         `<edge source="${e.sourceTemp}" target="${e.targetTemp}" type="${e.type}">${e.description}</edge>`,
     )
     .join("\n");
-  const prompt = `You are a graph cleaning assistant. Given this subgraph, propose merges (pairs of temp IDs to merge), deletes (temp IDs to remove), additions (new edges), and any new nodes.
+  const prompt = `You are a graph cleaning assistant. Given this subgraph, propose merges (pairs of temp IDs to merge), deletes (temp IDs to remove), additions (new edges, each with a concise description of its meaning), and any new nodes.
 Nodes:
 ${nodesList}
 Edges:
@@ -379,8 +406,10 @@ async function applyCleanupProposal(
   return db.transaction(async (tx) => {
     const merged: CleanupGraphResult["merged"] = [];
     const removed: CleanupGraphResult["removed"] = [];
-    const addedEdges: CleanupGraphResult["addedEdges"] = [];
-    const createdNodes: CleanupGraphResult["createdNodes"] = [];
+    const addedEdgesResult: CleanupGraphResult["addedEdges"] = [];
+    const createdNodes: Array<
+      CleanupGraphResult["createdNodes"][number] & { tempId?: string }
+    > = [];
 
     // Preprocessing: remap temp IDs for merges
     const remap = new Map<string, string>();
@@ -392,18 +421,19 @@ async function applyCleanupProposal(
       new Set(proposal.deletes.map((d) => remap.get(d.tempId) ?? d.tempId)),
     ).map((tempId) => ({ tempId }));
     // Rewrite additions with remapped IDs, drop self-edges
-    const newEdges = proposal.additions
-      .map(({ source, target, type }) => ({
+    const newEdgesToCreate = proposal.additions
+      .map(({ source, target, type, description }) => ({
         source: remap.get(source) ?? source,
         target: remap.get(target) ?? target,
         type,
+        description,
       }))
       .filter((e) => e.source !== e.target);
     // Keep newNodes as-is
-    const newNodes = [...proposal.newNodes];
+    const newNodesToCreate = [...proposal.newNodes];
 
     // Step 1: Create new nodes
-    for (const n of newNodes) {
+    for (const n of newNodesToCreate) {
       const inserted = await tx
         .insert(nodes)
         .values({ userId, nodeType: n.type })
@@ -413,7 +443,12 @@ async function applyCleanupProposal(
       await tx
         .insert(nodeMetadata)
         .values({ nodeId, label: n.label, description: n.description });
-      createdNodes.push({ nodeId, label: n.label, description: n.description });
+      createdNodes.push({
+        nodeId,
+        label: n.label,
+        description: n.description,
+        tempId: n.tempId,
+      });
     }
 
     // Step 2: Merges
@@ -426,65 +461,164 @@ async function applyCleanupProposal(
       await rewireNodeEdges(tx, removeId, keepId, userId);
       await rewireSourceLinks(tx, removeId, keepId);
       await deleteNode(tx, removeId, userId);
-      const keepInfo = mapper.getItem(keepId);
-      const removeInfo = mapper.getItem(removeId);
       merged.push({
         keep: keepId,
-        keepLabel: keepInfo?.label ?? "",
-        keepDescription: keepInfo?.description ?? "",
+        keepLabel: keepNode.label,
+        keepDescription: keepNode.description,
         remove: removeId,
-        removeLabel: removeInfo?.label ?? "",
-        removeDescription: removeInfo?.description ?? "",
+        removeLabel: removeNode.label,
+        removeDescription: removeNode.description,
       });
     }
 
-    // Step 3: Additions
-    for (const e of newEdges) {
-      const src = mapper.getItem(e.source);
-      const tgt = mapper.getItem(e.target);
-      if (!src || !tgt) continue;
-      await tx
+    // Step 3: Additions (new edges)
+    const edgeInserts: Array<typeof edges.$inferInsert> = [];
+    for (const e of newEdgesToCreate) {
+      const srcNodeOriginal = mapper.getItem(e.source);
+      const tgtNodeOriginal = mapper.getItem(e.target);
+
+      const srcNodeNew = createdNodes.find((cn) => cn.tempId === e.source);
+      const tgtNodeNew = createdNodes.find((cn) => cn.tempId === e.target);
+
+      const srcId = srcNodeOriginal?.id ?? srcNodeNew?.nodeId;
+      const tgtId = tgtNodeOriginal?.id ?? tgtNodeNew?.nodeId;
+
+      if (!srcId || !tgtId) {
+        console.warn(
+          `Skipping edge creation due to missing node mapping: ${e.source} -> ${e.target}`,
+        );
+        continue;
+      }
+      edgeInserts.push({
+        userId,
+        sourceNodeId: srcId,
+        targetNodeId: tgtId,
+        edgeType: e.type,
+        description: e.description,
+        metadata: {},
+      });
+    }
+
+    let insertedEdgeRecords: Array<typeof edges.$inferSelect> = [];
+    if (edgeInserts.length > 0) {
+      insertedEdgeRecords = await tx
         .insert(edges)
-        .values({
-          userId,
-          sourceNodeId: src.id,
-          targetNodeId: tgt.id,
-          edgeType: e.type,
-          metadata: {},
-        })
+        .values(edgeInserts)
         .onConflictDoNothing({
-          target: [edges.sourceNodeId, edges.targetNodeId],
+          target: [edges.sourceNodeId, edges.targetNodeId, edges.edgeType],
+        })
+        .returning();
+
+      for (const r of insertedEdgeRecords) {
+        addedEdgesResult.push({
+          source: r.sourceNodeId,
+          target: r.targetNodeId,
+          type: r.edgeType,
         });
-      addedEdges.push({ source: src.id, target: tgt.id, type: e.type });
+      }
     }
 
     // Step 4: Deletes
     for (const d of newDeletes) {
-      const node = mapper.getItem(d.tempId);
-      if (!node) continue;
-      const id = node.id;
-      await deleteNode(tx, id, userId);
-      const info = mapper.getItem(id);
+      const nodeToDelete = mapper.getItem(d.tempId);
+      if (!nodeToDelete) continue;
+
+      // Check if this node was supposed to be kept from a merge operation
+      // If so, it means the LLM decided to merge AND delete the same original node which doesn't make sense.
+      // Or, it's trying to delete a newly created node (which also doesn't make sense if it just created it).
+      // For now, we'll prioritize merge instructions. If a node is a 'keep' in a merge, don't delete it.
+      const isKeepNodeInMerge = proposal.merges.some(
+        (m) => m.keep === d.tempId,
+      );
+      if (isKeepNodeInMerge) {
+        console.warn(
+          `Attempted to delete node ${d.tempId} (${nodeToDelete.label}) which was also marked as 'keep' in a merge. Skipping delete.`,
+        );
+        continue;
+      }
+
+      await deleteNode(tx, nodeToDelete.id, userId);
       removed.push({
-        nodeId: id,
-        label: info?.label ?? "",
-        description: info?.description ?? "",
+        nodeId: nodeToDelete.id,
+        label: nodeToDelete.label,
+        description: nodeToDelete.description,
       });
     }
 
-    // Generate embeddings for all created nodes with labels
-    await generateAndInsertNodeEmbeddings(
-      tx,
-      createdNodes
-        .filter((node) => node.label)
-        .map((node) => ({
-          id: node.nodeId,
-          label: node.label,
-          description: node.description,
-        })),
+    // Step 5: Generate embeddings for new nodes and edges
+    const newNodesLookup = new Map(
+      createdNodes.map((n) => [
+        n.nodeId,
+        { label: n.label, description: n.description },
+      ]),
     );
 
-    return { merged, removed, addedEdges, createdNodes };
+    // Run embedding generation concurrently
+    await Promise.all([
+      // Generate and insert edge embeddings
+      generateAndInsertEdgeEmbeddings(
+        tx,
+        insertedEdgeRecords
+          .map(
+            (edgeRecord: typeof edges.$inferSelect): EmbeddableEdge | null => {
+              const sourceNodeMappedEntry = mapper
+                .entries()
+                .find(
+                  ({ item }: { item: GraphNode }) =>
+                    item.id === edgeRecord.sourceNodeId,
+                );
+              const targetNodeMappedEntry = mapper
+                .entries()
+                .find(
+                  ({ item }: { item: GraphNode }) =>
+                    item.id === edgeRecord.targetNodeId,
+                );
+              const sourceNodeOriginal = sourceNodeMappedEntry?.item;
+              const targetNodeOriginal = targetNodeMappedEntry?.item;
+
+              const sourceLabel =
+                sourceNodeOriginal?.label ??
+                newNodesLookup.get(edgeRecord.sourceNodeId)?.label;
+              const targetLabel =
+                targetNodeOriginal?.label ??
+                newNodesLookup.get(edgeRecord.targetNodeId)?.label;
+
+              if (!sourceLabel || !targetLabel) {
+                console.warn(
+                  `Skipping embedding for edge ${edgeRecord.id}: missing label or description is not a string.`,
+                );
+                return null;
+              }
+
+              return {
+                edgeId: edgeRecord.id,
+                edgeType: edgeRecord.edgeType,
+                description: edgeRecord.description,
+                sourceLabel,
+                targetLabel,
+              };
+            },
+          )
+          .filter((e): e is EmbeddableEdge => e !== null),
+      ),
+      // Generate and insert node embeddings
+      generateAndInsertNodeEmbeddings(
+        tx,
+        createdNodes.map((n) => ({
+          id: n.nodeId,
+          label: n.label,
+          description: n.description,
+        })),
+      ),
+    ]);
+
+    // Return structured result
+    return {
+      merged,
+      removed,
+      addedEdges: addedEdgesResult,
+      createdNodes: createdNodes,
+    };
   });
 }
 
@@ -513,7 +647,7 @@ async function rewireNodeEdges(
         metadata: edge.metadata,
       })
       .onConflictDoNothing({
-        target: [edges.sourceNodeId, edges.targetNodeId],
+        target: [edges.sourceNodeId, edges.targetNodeId, edges.edgeType],
       });
   }
   await tx
@@ -535,7 +669,7 @@ async function rewireNodeEdges(
         metadata: edge.metadata,
       })
       .onConflictDoNothing({
-        target: [edges.sourceNodeId, edges.targetNodeId],
+        target: [edges.sourceNodeId, edges.targetNodeId, edges.edgeType],
       });
   }
   await tx
@@ -603,8 +737,8 @@ export function logProposalOverview(
   if (proposal.merges.length) {
     console.log("Merges:");
     proposal.merges.forEach(({ keep, remove }) => {
-      const keepNode = mapper.getItem(keep);
-      const removeNode = mapper.getItem(remove);
+      const keepNode = mapper.getItem(keep as TypeId<"node">);
+      const removeNode = mapper.getItem(remove as TypeId<"node">);
       console.log(
         ` - Merge: ${keep} (${keepNode?.label || ""} / ${keepNode?.description || ""}) <- ${remove} (${removeNode?.label || ""} / ${removeNode?.description || ""})`,
       );
@@ -614,7 +748,7 @@ export function logProposalOverview(
   if (proposal.deletes.length) {
     console.log("Deletes:");
     proposal.deletes.forEach(({ tempId }) => {
-      const node = mapper.getItem(tempId);
+      const node = mapper.getItem(tempId as TypeId<"node">);
       console.log(
         ` - Delete: ${tempId} (${node?.label || ""} / ${node?.description || ""})`,
       );
@@ -623,11 +757,11 @@ export function logProposalOverview(
 
   if (proposal.additions.length) {
     console.log("Additions:");
-    proposal.additions.forEach(({ source, target, type }) => {
-      const sNode = mapper.getItem(source);
-      const tNode = mapper.getItem(target);
+    proposal.additions.forEach(({ source, target, type, description }) => {
+      const sNode = mapper.getItem(source as TypeId<"node">);
+      const tNode = mapper.getItem(target as TypeId<"node">);
       console.log(
-        ` - Add Edge: ${sNode?.label || ""} -> ${tNode?.label || ""} (${type})`,
+        ` - Add Edge: ${sNode?.label || ""} -> ${tNode?.label || ""} (${type}) - ${description}`,
       );
     });
   }

@@ -126,10 +126,11 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           `Starting cleanup-graph job for user ${data.userId}, since ${data.since.toISOString()}`,
         );
 
-        const { cleanupGraph } = await import("./jobs/cleanup-graph");
-        await cleanupGraph({
+        const { runIterativeCleanup } = await import("./jobs/run-iterative-cleanup");
+        await runIterativeCleanup({
           ...data,
-          llmModelId: env.MODEL_ID_GRAPH_EXTRACTION,
+          iterations: 5, // default to 5 iterations per run
+          seedsPerIteration: data.entryNodeLimit,
         });
         console.log(`Cleanup-graph completed for user ${data.userId}.`);
       } else {

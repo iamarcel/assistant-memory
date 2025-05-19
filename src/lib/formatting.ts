@@ -1,6 +1,5 @@
 import { formatISO } from "date-fns";
 import type {
-  NodeWithConnections,
   NodeSearchResult,
   EdgeSearchResult,
   OneHopNode,
@@ -90,7 +89,6 @@ export function formatLabelDescList(
 ${xmlItems}
 </items>`;
 }
-
 
 // Group definitions for reranked search results
 type SearchGroups = {

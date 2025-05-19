@@ -1,10 +1,10 @@
-import { fetchEntryNodes, cleanupGraphIteration } from './cleanup-graph';
+import { fetchEntryNodes, cleanupGraphIteration } from "./cleanup-graph";
 import type {
   CleanupGraphParams,
   CleanupGraphIterationParams,
   CleanupGraphResult,
-} from './cleanup-graph';
-import { TypeId } from '~/types/typeid';
+} from "./cleanup-graph";
+import { TypeId } from "~/types/typeid";
 
 /**
  * Params for iterative cleanup across multiple seed batches
@@ -25,11 +25,11 @@ export interface IterativeCleanupParams extends CleanupGraphParams {
 }
 
 function pickNextSeeds(
-  pool: TypeId<'node'>[],
-  processed: Set<TypeId<'node'>>,
+  pool: TypeId<"node">[],
+  processed: Set<TypeId<"node">>,
   count: number,
-): TypeId<'node'>[] {
-  const next: TypeId<'node'>[] = [];
+): TypeId<"node">[] {
+  const next: TypeId<"node">[] = [];
   for (const id of pool) {
     if (!processed.has(id)) {
       next.push(id);
@@ -39,10 +39,10 @@ function pickNextSeeds(
   return next;
 }
 
-function harvestNewSeeds(result: CleanupGraphResult): TypeId<'node'>[] {
+function harvestNewSeeds(result: CleanupGraphResult): TypeId<"node">[] {
   const keepIds = result.merged.map((m) => m.keep);
   const otherIds = Array.from(
-    new Set<TypeId<'node'>>([
+    new Set<TypeId<"node">>([
       ...result.createdNodes.map((n) => n.nodeId),
       ...result.addedEdges.flatMap((e) => [e.source, e.target]),
     ]),
@@ -70,14 +70,16 @@ export async function runIterativeCleanup(
     since,
     seedsPerIteration * iterations,
   );
-  const processed = new Set<TypeId<'node'>>();
+  const processed = new Set<TypeId<"node">>();
   let successCount = 0;
   let attempt = 0;
 
   while (successCount < iterations) {
     attempt++;
     const seeds = pickNextSeeds(seedPool, processed, seedsPerIteration);
-    console.debug(`[cleanup-iter] Attempt ${attempt} seeds: ${seeds.join(', ')}`);
+    console.debug(
+      `[cleanup-iter] Attempt ${attempt} seeds: ${seeds.join(", ")}`,
+    );
     if (seeds.length === 0) {
       console.debug(`[cleanup-iter] No seeds left; stopping early`);
       break;
@@ -109,7 +111,9 @@ export async function runIterativeCleanup(
     if (dynamicFollowups) {
       const newSeeds = harvestNewSeeds(result);
       seedPool = seedPool.concat(newSeeds);
-      console.debug(`[cleanup-iter] Harvested ${newSeeds.length} follow-up seeds`);
+      console.debug(
+        `[cleanup-iter] Harvested ${newSeeds.length} follow-up seeds`,
+      );
     }
   }
 

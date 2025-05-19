@@ -1,7 +1,9 @@
+import { SSEServerTransport } from "./sse";
 import {
   McpServer,
   ResourceTemplate,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { saveMemory } from "~/lib/ingestion/save-document";
 import { queryDayMemories } from "~/lib/query/day";
 import { searchMemory } from "~/lib/query/search";
@@ -17,8 +19,6 @@ import {
   querySearchRequestSchema,
   type QuerySearchRequest,
 } from "~/lib/schemas/query-search";
-import { z } from "zod";
-import { SSEServerTransport } from "./sse";
 
 const transports: { [sessionId: string]: SSEServerTransport } = {};
 
@@ -44,7 +44,7 @@ server.resource(
         text: `Hello, ${name}!`,
       },
     ],
-  })
+  }),
 );
 
 // Expose ingest document functionality as "save memory"

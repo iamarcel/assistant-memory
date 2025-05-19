@@ -21,5 +21,9 @@ export const ingestConversationResponseSchema = z.object({
   jobId: z.string(),
 });
 
-export type IngestConversationRequest = z.infer<typeof ingestConversationRequestSchema>;
-export type IngestConversationResponse = z.infer<typeof ingestConversationResponseSchema>;
+export type IngestConversationRequest = z.infer<
+  typeof ingestConversationRequestSchema
+>;
+export type IngestConversationResponse = z.infer<
+  typeof ingestConversationResponseSchema
+>;

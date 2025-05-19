@@ -15,4 +15,6 @@ export const ingestDocumentResponseSchema = z.object({
 });
 
 export type IngestDocumentRequest = z.infer<typeof ingestDocumentRequestSchema>;
-export type IngestDocumentResponse = z.infer<typeof ingestDocumentResponseSchema>;
+export type IngestDocumentResponse = z.infer<
+  typeof ingestDocumentResponseSchema
+>;

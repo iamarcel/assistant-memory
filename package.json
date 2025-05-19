@@ -29,6 +29,8 @@
     "preview": "node .output/server/index.mjs",
     "tsx": "tsx",
     "test": "vitest",
+    "lint": "eslint src --ext .js,.mjs,.cjs,.ts",
+    "format": "prettier --check .",
     "drizzle:push": "drizzle-kit push",
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:migrate": "drizzle-kit migrate",

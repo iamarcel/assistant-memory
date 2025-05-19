@@ -104,9 +104,7 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           `Starting ingest-document job for user ${userId}, document ${documentId}`,
         );
 
-        const { ingestDocument } = await import(
-          "./jobs/ingest-document"
-        );
+        const { ingestDocument } = await import("./jobs/ingest-document");
         await ingestDocument({
           db,
           userId,
@@ -114,9 +112,7 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           content,
           timestamp,
         });
-        console.log(
-          `Ingested document ${documentId} for user ${userId}.`,
-        );
+        console.log(`Ingested document ${documentId} for user ${userId}.`);
       } else if (job.name === "cleanup-graph") {
         const data = CleanupGraphJobInputSchema.parse({
           ...job.data,
@@ -126,7 +122,9 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           `Starting cleanup-graph job for user ${data.userId}, since ${data.since.toISOString()}`,
         );
 
-        const { runIterativeCleanup } = await import("./jobs/run-iterative-cleanup");
+        const { runIterativeCleanup } = await import(
+          "./jobs/run-iterative-cleanup"
+        );
         await runIterativeCleanup({
           ...data,
           iterations: 5, // default to 5 iterations per run

@@ -18,11 +18,14 @@
       "types": "./dist/sdk/*.d.ts"
     }
   },
+  "bin": {
+    "memory-stdio": "dist/cli.js"
+  },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "nitro build",
+    "build": "nitro build && tsc --outDir dist --module NodeNext src/cli.ts",
     "build-sdk": "tsc --project tsconfig.sdk.json",
     "dev": "nitro dev",
     "prepare": "nitro prepare",

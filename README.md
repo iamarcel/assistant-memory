@@ -28,3 +28,13 @@ This can be used, for example, in the first message with an assistant so it know
 ## MCP Server
 
 An MCP server is also exposed so the assistant can explicitly query for data as well.
+
+## Command line usage
+
+You can run the MCP server over stdio using `npx`:
+
+```bash
+npx @marcelsamyn/memory memory-stdio
+```
+
+This starts the MCP server and communicates via stdin/stdout.

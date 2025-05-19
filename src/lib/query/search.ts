@@ -1,10 +1,6 @@
 import { generateEmbeddings } from "../embeddings";
 import { formatSearchResultsAsXml } from "../formatting";
-import {
-  findOneHopNodes,
-  findSimilarEdges,
-  findSimilarNodes,
-} from "../graph";
+import { findOneHopNodes, findSimilarEdges, findSimilarNodes } from "../graph";
 import { rerankMultiple } from "../rerank";
 import {
   QuerySearchRequest,

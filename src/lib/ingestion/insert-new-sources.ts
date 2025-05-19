@@ -10,7 +10,7 @@ export interface SourceInput {
   content?: string;
   fileBuffer?: Buffer;
   contentType?: string;
-  metadata?: SourceCreateInput['metadata'];
+  metadata?: SourceCreateInput["metadata"];
 }
 
 export async function insertNewSources(params: {

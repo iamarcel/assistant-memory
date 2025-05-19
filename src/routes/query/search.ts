@@ -1,7 +1,6 @@
 import { searchMemory } from "~/lib/query/search";
 import {
   querySearchRequestSchema,
-  QuerySearchResponse,
   querySearchResponseSchema,
 } from "~/lib/schemas/query-search";
 

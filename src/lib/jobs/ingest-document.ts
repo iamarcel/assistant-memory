@@ -1,9 +1,9 @@
-import { z } from "zod";
-import { DrizzleDB } from "~/db";
+import { extractGraph } from "../extract-graph";
+import { ensureSourceNode } from "../ingestion/ensure-source-node";
 import { ensureUser } from "../ingestion/ensure-user";
 import { sourceService } from "../sources";
-import { ensureSourceNode } from "../ingestion/ensure-source-node";
-import { extractGraph } from "../extract-graph";
+import { z } from "zod";
+import { DrizzleDB } from "~/db";
 import { NodeTypeEnum } from "~/types/graph";
 
 export const IngestDocumentJobInputSchema = z.object({
@@ -31,19 +31,20 @@ export async function ingestDocument({
   await ensureUser(db, userId);
 
   // Insert the document as a single source
-  const { successes: insertedSourceInternalIds, failures } = await sourceService.insertMany([
-    {
-      userId,
-      sourceType: "document",
-      externalId: documentId,
-      timestamp,
-      content, // Store content directly for documents
-      metadata: {
-        // You could add other document-specific metadata here if needed
-        // e.g., original filename, author, etc.
+  const { successes: insertedSourceInternalIds, failures } =
+    await sourceService.insertMany([
+      {
+        userId,
+        sourceType: "document",
+        externalId: documentId,
+        timestamp,
+        content, // Store content directly for documents
+        metadata: {
+          // You could add other document-specific metadata here if needed
+          // e.g., original filename, author, etc.
+        },
       },
-    },
-  ]);
+    ]);
 
   if (failures.length > 0) {
     console.warn(
@@ -69,7 +70,7 @@ export async function ingestDocument({
   const documentNodeId = await ensureSourceNode({
     db,
     userId,
-    sourceId: sourceNodeId, 
+    sourceId: sourceNodeId,
     timestamp,
     nodeType: NodeTypeEnum.enum.Document,
   });
@@ -82,5 +83,7 @@ export async function ingestDocument({
     content, // Pass the raw document content for graph extraction
   });
 
-  console.log(`Successfully ingested and processed document ${documentId} for user ${userId}`);
+  console.log(
+    `Successfully ingested and processed document ${documentId} for user ${userId}`,
+  );
 }

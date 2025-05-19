@@ -83,7 +83,7 @@ export async function ensureSourceNode({
       .insert(edges)
       .values({
         userId,
-        edgeType: EdgeTypeEnum.Enum.OCCURRED_ON,
+        edgeType: EdgeTypeEnum.enum.OCCURRED_ON,
         sourceNodeId: newNode.id,
         targetNodeId: dayNodeId,
       })

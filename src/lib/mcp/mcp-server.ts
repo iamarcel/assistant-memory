@@ -2,6 +2,21 @@ import {
   McpServer,
   ResourceTemplate,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { saveMemory } from "~/lib/ingestion/save-document";
+import { queryDayMemories } from "~/lib/query/day";
+import { searchMemory } from "~/lib/query/search";
+import {
+  ingestDocumentRequestSchema,
+  type IngestDocumentRequest,
+} from "~/lib/schemas/ingest-document-request";
+import {
+  queryDayRequestSchema,
+  type QueryDayRequest,
+} from "~/lib/schemas/query-day";
+import {
+  querySearchRequestSchema,
+  type QuerySearchRequest,
+} from "~/lib/schemas/query-search";
 import { z } from "zod";
 import { SSEServerTransport } from "./sse";
 
@@ -30,6 +45,52 @@ server.resource(
       },
     ],
   })
+);
+
+// Expose ingest document functionality as "save memory"
+server.tool(
+  "save memory",
+  ingestDocumentRequestSchema,
+  async ({ userId, document }: IngestDocumentRequest) => {
+    await saveMemory({ userId, document });
+    return {
+      content: [{ type: "text", text: "Memory saved" }],
+    };
+  },
+);
+
+// Expose search as "search memory"
+server.tool(
+  "search memory",
+  querySearchRequestSchema,
+  async ({ userId, query, limit, excludeNodeTypes }: QuerySearchRequest) => {
+    const { formattedResult } = await searchMemory({
+      userId,
+      query,
+      limit,
+      excludeNodeTypes,
+    });
+
+    return {
+      content: [{ type: "text", text: formattedResult }],
+    };
+  },
+);
+
+// Expose day query as "retrieve memories relevant for today"
+server.tool(
+  "retrieve memories relevant for today",
+  queryDayRequestSchema,
+  async ({ userId, date }: QueryDayRequest) => {
+    const { formattedResult } = await queryDayMemories({
+      userId,
+      date,
+      includeFormattedResult: true,
+    });
+    return {
+      content: [{ type: "text", text: formattedResult ?? "" }],
+    };
+  },
 );
 
 export const addTransport = (transport: SSEServerTransport) => {

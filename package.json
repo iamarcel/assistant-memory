@@ -25,8 +25,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "nitro build && tsc --outDir dist --module NodeNext src/cli.ts && mv dist/cli.js dist/cli.mjs",
+    "build": "nitro build",
     "build-sdk": "tsc --project tsconfig.sdk.json",
+    "build-cli": "tsc --outDir dist --module NodeNext src/cli.ts && mv dist/cli.js dist/cli.mjs",
     "dev": "nitro dev",
     "prepare": "nitro prepare",
     "preview": "node .output/server/index.mjs",

@@ -61,13 +61,13 @@ export async function queryDayMemories(
 
   let formattedResult: string | undefined;
   if (includeFormattedResult && connectedNodes.length > 0) {
-    const nodesByEdge = connectedNodes.reduce<Record<EdgeType, (typeof connectedNodes)[number][]>>(
+    const nodesByEdge = connectedNodes.reduce<Record<string, (typeof connectedNodes)[number][]>>(
       (acc, node) => {
-        const type = (node.edgeType ?? "Unknown") as EdgeType;
-        (acc[type] ??= []).push(node);
+        const key: string = node.edgeType ?? "Unknown"; // 'key' is now explicitly a string
+        (acc[key] ??= []).push(node);
         return acc;
       },
-      {} as Record<EdgeType, (typeof connectedNodes)[number][]>,
+      {} as Record<string, (typeof connectedNodes)[number][]>, // Ensure accumulator type uses string key
     );
 
     let formatted = `# Memories from ${date}\n\n`;

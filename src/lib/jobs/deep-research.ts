@@ -86,7 +86,7 @@ export async function performDeepResearch({
         toDocument: (c) => `${c.label}: ${c.description}`,
       },
     },
-    20 // Get more results for deep research
+    7 // Limited results to prevent context window overflow
   );
 
   // 5. Store result in Redis with expiration time (24 hours)

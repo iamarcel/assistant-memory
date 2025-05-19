@@ -15,7 +15,6 @@ export const querySearchRequestSchema = z.object({
 export const querySearchResponseSchema = z.object({
   query: z.string(),
   formattedResult: z.string(),
-  deepResearchResults: z.string().optional(),
 });
 
 export type QuerySearchRequest = z.infer<typeof querySearchRequestSchema>;

@@ -9,6 +9,7 @@ import { DrizzleDB } from "~/db";
 import { type ConversationTurn } from "~/lib/conversation-store";
 import { NodeTypeEnum } from "~/types/graph";
 import { TypeId } from "~/types/typeid";
+import { redisClient } from "~/utils/redis";
 
 export const MessageSchema = z.object({
   id: z.string(),
@@ -71,18 +72,32 @@ export async function ingestConversation({
   });
   
   // If there are user messages, trigger deep research in the background
-  const userMessages = insertedTurns.filter(turn => turn.role === "user");
-  if (userMessages.length > 0) {
-    // Use the latest user message to start deep research for next conversation turn
-    const latestUserMessage = userMessages[userMessages.length - 1];
+  const conversationMessages = insertedTurns.filter(turn => turn.role === "user" || turn.role === "assistant");
+  if (conversationMessages.length > 0) {
+    // Use the 4 most recent user and assistant messages for context
+    const recentMessages = conversationMessages.slice(-4);
+    const combinedQuery = recentMessages
+      .map(msg => `${msg.role}: ${msg.content}`)
+      .join("\n\n");
     
     try {
-      await batchQueue.add("deep-research", {
-        userId,
-        conversationId,
-        query: latestUserMessage.content,
-      });
-      console.log(`Queued deep research job for conversation ${conversationId}`);
+      // Check if we've recently triggered a deep research job for this conversation
+      const throttleKey = `deep_research_throttle:${userId}:${conversationId}`;
+      const lastTriggered = await redisClient.get(throttleKey);
+      
+      if (!lastTriggered) {
+        await batchQueue.add("deep-research", {
+          userId,
+          conversationId,
+          query: combinedQuery,
+        });
+        
+        // Set throttling key with 1-minute expiration
+        await redisClient.set(throttleKey, Date.now().toString(), 'EX', 60);
+        console.log(`Queued deep research job for conversation ${conversationId}`);
+      } else {
+        console.log(`Deep research job throttled for conversation ${conversationId}`);
+      }
     } catch (error) {
       console.error(`Failed to queue deep research job: ${error}`);
       // Don't fail the main ingestion if queuing the deep research job fails

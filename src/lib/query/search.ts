@@ -78,14 +78,16 @@ export async function searchMemory(
   );
 
   // Check for any previous deep research results
-  let deepResearchResults: string | undefined;
+  let formattedResult = formatSearchResultsAsXml(rerankedResults);
   
   if (conversationId) {
     try {
       const deepResearch = await getDeepResearchResult(userId, conversationId);
       
       if (deepResearch) {
-        deepResearchResults = `<deep_research query="${deepResearch.query}">${deepResearch.formattedResult}</deep_research>`;
+        // Integrate deep research results directly into the main formatted results
+        formattedResult = formattedResult.replace("</search_results>", 
+          `<deep_research query="${deepResearch.query}">${deepResearch.formattedResult}</deep_research></search_results>`);
       }
       
       // Queue a new deep research job for the next turn
@@ -102,7 +104,6 @@ export async function searchMemory(
 
   return {
     query,
-    formattedResult: formatSearchResultsAsXml(rerankedResults),
-    deepResearchResults,
+    formattedResult,
   };
 }

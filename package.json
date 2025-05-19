@@ -27,7 +27,7 @@
   "scripts": {
     "build": "nitro build",
     "build-sdk": "tsc --project tsconfig.sdk.json",
-    "build-cli": "tsc --outDir dist --module NodeNext src/cli.ts && mv dist/cli.js dist/cli.mjs",
+    "build-cli": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=es2022 --outfile=dist/cli.mjs --tsconfig=tsconfig.cli.json",
     "dev": "nitro dev",
     "prepare": "nitro prepare",
     "preview": "node .output/server/index.mjs",

@@ -7,9 +7,9 @@ import {
 
 export default defineEventHandler(async (event) => {
   // Parse the request
-  const { userId, query, limit, excludeNodeTypes } =
+  const { userId, query, limit, excludeNodeTypes, conversationId } =
     querySearchRequestSchema.parse(await readBody(event));
   return querySearchResponseSchema.parse(
-    await searchMemory({ userId, query, limit, excludeNodeTypes }),
+    await searchMemory({ userId, query, limit, excludeNodeTypes, conversationId }),
   );
 });

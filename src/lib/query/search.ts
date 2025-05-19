@@ -5,6 +5,8 @@ import {
   findSimilarEdges,
   findSimilarNodes,
 } from "../graph";
+import { getDeepResearchResult } from "../jobs/deep-research";
+import { batchQueue } from "../queues";
 import { rerankMultiple } from "../rerank";
 import {
   QuerySearchRequest,
@@ -18,9 +20,10 @@ import { useDatabase } from "~/utils/db";
 export async function searchMemory(
   params: QuerySearchRequest,
 ): Promise<QuerySearchResponse> {
-  const { userId, query, limit, excludeNodeTypes } = params;
+  const { userId, query, limit, excludeNodeTypes, conversationId } = params;
   const db = await useDatabase();
 
+  // Regular search process
   const embeddingsResponse = await generateEmbeddings({
     model: "jina-embeddings-v3",
     task: "retrieval.query",
@@ -74,8 +77,32 @@ export async function searchMemory(
     limit,
   );
 
+  // Check for any previous deep research results
+  let deepResearchResults: string | undefined;
+  
+  if (conversationId) {
+    try {
+      const deepResearch = await getDeepResearchResult(userId, conversationId);
+      
+      if (deepResearch) {
+        deepResearchResults = `<deep_research query="${deepResearch.query}">${deepResearch.formattedResult}</deep_research>`;
+      }
+      
+      // Queue a new deep research job for the next turn
+      await batchQueue.add("deep-research", {
+        userId,
+        conversationId,
+        query,
+      });
+    } catch (error) {
+      console.error("Error processing deep research:", error);
+      // Don't fail the main search if deep research has issues
+    }
+  }
+
   return {
     query,
     formattedResult: formatSearchResultsAsXml(rerankedResults),
+    deepResearchResults,
   };
 }

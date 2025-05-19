@@ -3,6 +3,7 @@ import { formatConversationAsXml } from "../formatting";
 import { ensureUser } from "../ingestion/ensure-user";
 import { insertNewSources } from "../ingestion/insert-new-sources";
 import { ensureSourceNode } from "../ingestion/ensure-source-node";
+import { batchQueue } from "../queues";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
 import { type ConversationTurn } from "~/lib/conversation-store";
@@ -68,6 +69,25 @@ export async function ingestConversation({
     linkedNodeId: conversationNodeId,
     content: formatConversationAsXml(insertedTurns),
   });
+  
+  // If there are user messages, trigger deep research in the background
+  const userMessages = insertedTurns.filter(turn => turn.role === "user");
+  if (userMessages.length > 0) {
+    // Use the latest user message to start deep research for next conversation turn
+    const latestUserMessage = userMessages[userMessages.length - 1];
+    
+    try {
+      await batchQueue.add("deep-research", {
+        userId,
+        conversationId,
+        query: latestUserMessage.content,
+      });
+      console.log(`Queued deep research job for conversation ${conversationId}`);
+    } catch (error) {
+      console.error(`Failed to queue deep research job: ${error}`);
+      // Don't fail the main ingestion if queuing the deep research job fails
+    }
+  }
   return { insertedTurns };
 }
 

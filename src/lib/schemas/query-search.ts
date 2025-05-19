@@ -9,11 +9,13 @@ export const querySearchRequestSchema = z.object({
   excludeNodeTypes: z
     .array(NodeTypeEnum)
     .default([NodeTypeEnum.enum.AssistantDream, NodeTypeEnum.enum.Temporal]),
+  conversationId: z.string().optional(),
 });
 
 export const querySearchResponseSchema = z.object({
   query: z.string(),
   formattedResult: z.string(),
+  deepResearchResults: z.string().optional(),
 });
 
 export type QuerySearchRequest = z.infer<typeof querySearchRequestSchema>;

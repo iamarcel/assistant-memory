@@ -1,6 +1,8 @@
 import { assistantDreamJob } from "./jobs/atlas-assistant";
 import { processAtlasJob } from "./jobs/atlas-user";
 import { CleanupGraphJobInputSchema } from "./jobs/cleanup-graph";
+import { performDeepResearch } from "./jobs/deep-research";
+import { DeepResearchJobInputSchema } from "./schemas/deep-research";
 import { dream } from "./jobs/dream";
 import { IngestConversationJobInputSchema } from "./jobs/ingest-conversation";
 import { IngestDocumentJobInputSchema } from "./jobs/ingest-document";
@@ -35,9 +37,15 @@ export interface DreamJobData {
   assistantDescription: string;
 }
 
+export interface DeepResearchJobData {
+  userId: string;
+  conversationId: string;
+  query: string;
+}
+
 // Create the worker
 // Keep the worker in scope even if not explicitly referenced later.
-const worker = new Worker<SummarizeJobData | DreamJobData>(
+const worker = new Worker<SummarizeJobData | DreamJobData | DeepResearchJobData>(
   "batchProcessing",
   async (job) => {
     const db = await useDatabase();
@@ -117,6 +125,25 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
         console.log(
           `Ingested document ${documentId} for user ${userId}.`,
         );
+      } else if (job.name === "deep-research") {
+        const { userId, conversationId, query } = DeepResearchJobInputSchema.parse(job.data);
+        console.log(
+          `Starting deep-research job for user ${userId}, conversation ${conversationId}`,
+        );
+        
+        try {
+          const result = await performDeepResearch({
+            db,
+            userId,
+            conversationId,
+            query,
+          });
+          console.log(
+            `Deep research completed for conversation ${conversationId}`,
+          );
+        } catch (error) {
+          console.error(`Error in deep research job: ${error}`);
+        }
       } else if (job.name === "cleanup-graph") {
         const data = CleanupGraphJobInputSchema.parse({
           ...job.data,

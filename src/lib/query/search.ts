@@ -7,7 +7,7 @@ import {
 } from "../graph";
 import { getDeepResearchResult } from "../jobs/deep-research";
 import { batchQueue } from "../queues";
-import { rerankMultiple } from "../rerank";
+import { rerankMultiple, RerankResult } from "../rerank";
 import {
   QuerySearchRequest,
   QuerySearchResponse,
@@ -77,17 +77,33 @@ export async function searchMemory(
     limit,
   );
 
+  // Initialize with standard search results
+  let finalResults = rerankedResults;
+
   // Check for any previous deep research results
-  let formattedResult = formatSearchResultsAsXml(rerankedResults);
-  
   if (conversationId) {
     try {
       const deepResearch = await getDeepResearchResult(userId, conversationId);
       
-      if (deepResearch) {
-        // Integrate deep research results directly into the main formatted results
-        formattedResult = formattedResult.replace("</search_results>", 
-          `<deep_research query="${deepResearch.query}">${deepResearch.formattedResult}</deep_research></search_results>`);
+      if (deepResearch && deepResearch.rerankedResults.length > 0) {
+        // Merge deep research results with regular search results
+        const combinedResults = [...finalResults, ...deepResearch.rerankedResults];
+        
+        // Remove duplicates based on item id if available
+        const uniqueResults = combinedResults.reduce((acc, current) => {
+          const itemId = current.item.id || `${current.group}-${current.score}`;
+          if (!acc.some(item => (item.item.id && item.item.id === current.item.id) || 
+                              (!item.item.id && item.score === current.score && item.group === current.group))) {
+            acc.push(current);
+          }
+          return acc;
+        }, [] as typeof combinedResults);
+        
+        // Sort by relevance score (descending)
+        uniqueResults.sort((a, b) => b.score - a.score);
+        
+        // Limit to the requested number of results
+        finalResults = uniqueResults.slice(0, limit);
       }
       
       // Queue a new deep research job for the next turn
@@ -101,6 +117,9 @@ export async function searchMemory(
       // Don't fail the main search if deep research has issues
     }
   }
+  
+  // Format the final results as XML
+  const formattedResult = formatSearchResultsAsXml(finalResults);
 
   return {
     query,

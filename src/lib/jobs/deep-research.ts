@@ -2,7 +2,7 @@ import { DrizzleDB } from "~/db";
 import { performStructuredAnalysis } from "~/lib/ai";
 import { formatSearchResultsAsXml } from "~/lib/formatting";
 import { findSimilarNodes, findSimilarEdges, findOneHopNodes } from "~/lib/graph";
-import { rerankMultiple } from "~/lib/rerank";
+import { rerankMultiple, RerankResult } from "~/lib/rerank";
 import { z } from "zod";
 import { DeepResearchJobInput } from "../schemas/deep-research";
 import { redisClient } from "~/utils/redis";
@@ -22,7 +22,7 @@ export async function performDeepResearch({
   userId,
   conversationId,
   query,
-}: DeepResearchParams): Promise<{ formattedResult: string }> {
+}: DeepResearchParams): Promise<{ rerankedResults: RerankResult<any>; formattedResult: string }> {
   // 1. Generate multiple related queries using LLM
   const queries = await generateRelatedQueries(userId, query);
   console.log(`Generated ${queries.length} related queries for deep research`);
@@ -96,10 +96,11 @@ export async function performDeepResearch({
     userId,
     conversationId,
     query,
+    rerankedResults,
     formattedResult
   });
 
-  return { formattedResult };
+  return { rerankedResults, formattedResult };
 }
 
 /**
@@ -142,16 +143,19 @@ export async function storeDeepResearchResult({
   userId,
   conversationId,
   query,
+  rerankedResults,
   formattedResult,
 }: {
   userId: string;
   conversationId: string;
   query: string;
+  rerankedResults: RerankResult<any>;
   formattedResult: string;
 }): Promise<void> {
   const key = `${DEEP_RESEARCH_KEY_PREFIX}${userId}:${conversationId}`;
   const value = JSON.stringify({
     query,
+    rerankedResults,
     formattedResult,
     timestamp: new Date().toISOString(),
   });
@@ -166,7 +170,7 @@ export async function storeDeepResearchResult({
 export async function getDeepResearchResult(
   userId: string,
   conversationId: string
-): Promise<{ formattedResult: string; query: string } | null> {
+): Promise<{ rerankedResults: RerankResult<any>; formattedResult: string; query: string } | null> {
   const key = `${DEEP_RESEARCH_KEY_PREFIX}${userId}:${conversationId}`;
   const data = await redisClient.get(key);
   
@@ -175,6 +179,7 @@ export async function getDeepResearchResult(
   try {
     const parsedData = JSON.parse(data);
     return {
+      rerankedResults: parsedData.rerankedResults,
       formattedResult: parsedData.formattedResult,
       query: parsedData.query,
     };

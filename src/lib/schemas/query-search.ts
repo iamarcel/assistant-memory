@@ -1,6 +1,6 @@
 import { EdgeTypeEnum, NodeTypeEnum } from "../../types/graph.js";
 import { z } from "zod";
-import type { SearchResults } from "../formatting";
+import { typeIdSchema } from "~/types/typeid.js";
 
 // Define the request schema
 export const querySearchRequestSchema = z.object({
@@ -15,7 +15,7 @@ export const querySearchRequestSchema = z.object({
 
 // Define schemas for the search result types
 const nodeSearchResultSchema = z.object({
-  id: z.string(),
+  id: typeIdSchema("node"),
   type: NodeTypeEnum,
   timestamp: z.date(),
   label: z.string().nullable(),
@@ -24,9 +24,9 @@ const nodeSearchResultSchema = z.object({
 });
 
 const edgeSearchResultSchema = z.object({
-  id: z.string(),
-  sourceNodeId: z.string(),
-  targetNodeId: z.string(),
+  id: typeIdSchema("edge"),
+  sourceNodeId: typeIdSchema("node"),
+  targetNodeId: typeIdSchema("node"),
   sourceLabel: z.string().nullable(),
   targetLabel: z.string().nullable(),
   edgeType: EdgeTypeEnum,
@@ -36,13 +36,13 @@ const edgeSearchResultSchema = z.object({
 });
 
 const oneHopNodeSchema = z.object({
-  id: z.string(),
+  id: typeIdSchema("node"),
   type: NodeTypeEnum,
   timestamp: z.date(),
   label: z.string().nullable(),
   description: z.string().nullable(),
-  edgeSourceId: z.string(),
-  edgeTargetId: z.string(),
+  edgeSourceId: typeIdSchema("node"),
+  edgeTargetId: typeIdSchema("node"),
   edgeType: EdgeTypeEnum,
   sourceLabel: z.string().nullable(),
   targetLabel: z.string().nullable(),

@@ -13,11 +13,11 @@ export default defineEventHandler(async (event) => {
     querySearchRequestSchema.parse(await readBody(event));
 
   // Get the standard search results
-  const { searchResults } = await searchMemory({ 
-    userId, 
-    query, 
-    limit, 
-    excludeNodeTypes 
+  const { searchResults } = await searchMemory({
+    userId,
+    query,
+    limit,
+    excludeNodeTypes,
   });
 
   // If no conversationId is provided, just format and return standard results
@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
     return querySearchResponseSchema.parse({
       query,
       searchResults,
-      formattedResult: formatSearchResultsAsXml(searchResults)
+      formattedResult: formatSearchResultsAsXml(searchResults),
     });
   }
 
@@ -37,19 +37,19 @@ export default defineEventHandler(async (event) => {
     return querySearchResponseSchema.parse({
       query,
       searchResults,
-      formattedResult: formatSearchResultsAsXml(searchResults)
+      formattedResult: formatSearchResultsAsXml(searchResults),
     });
   }
 
   // Combine standard and deep research results before formatting
   const combinedResults = [...searchResults, ...deepResults.results];
-  
+
   // Format the combined results
   const formattedResult = formatSearchResultsAsXml(combinedResults);
 
   return querySearchResponseSchema.parse({
     query,
     searchResults: combinedResults,
-    formattedResult
-  });
+    formattedResult,
+  } satisfies QuerySearchResponse);
 });

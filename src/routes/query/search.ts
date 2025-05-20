@@ -1,4 +1,5 @@
 import { getDeepResearchResult } from "~/lib/cache/deep-research-cache";
+import { formatSearchResultsAsXml } from "~/lib/formatting";
 import { searchMemory } from "~/lib/query/search";
 import {
   querySearchRequestSchema,
@@ -12,34 +13,40 @@ export default defineEventHandler(async (event) => {
     querySearchRequestSchema.parse(await readBody(event));
 
   // Get the standard search results
-  const standardResults = await searchMemory({ 
+  const { searchResults } = await searchMemory({ 
     userId, 
     query, 
     limit, 
     excludeNodeTypes 
   });
 
-  // If no conversationId is provided, just return standard results
+  // If no conversationId is provided, just format and return standard results
   if (!conversationId) {
-    return querySearchResponseSchema.parse(standardResults);
+    return querySearchResponseSchema.parse({
+      query,
+      formattedResult: formatSearchResultsAsXml(searchResults)
+    });
   }
 
   // Try to get deep research results from cache
   const deepResults = await getDeepResearchResult(userId, conversationId);
 
-  // If no deep research results, return standard results
+  // If no deep research results, format and return standard results
   if (!deepResults) {
-    return querySearchResponseSchema.parse(standardResults);
+    return querySearchResponseSchema.parse({
+      query,
+      formattedResult: formatSearchResultsAsXml(searchResults)
+    });
   }
 
-  // Merge standard and deep research results
-  // If both have content, combine them with standard results first
-  const combinedResults: QuerySearchResponse = {
-    query,
-    formattedResult: standardResults.formattedResult
-      ? standardResults.formattedResult + "\n" + deepResults.formattedResult
-      : deepResults.formattedResult,
-  };
+  // Combine standard and deep research results before formatting
+  const combinedResults = [...searchResults, ...deepResults.results];
+  
+  // Format the combined results
+  const formattedResult = formatSearchResultsAsXml(combinedResults);
 
-  return querySearchResponseSchema.parse(combinedResults);
+  return querySearchResponseSchema.parse({
+    query,
+    formattedResult
+  });
 });

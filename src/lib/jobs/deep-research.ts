@@ -7,14 +7,23 @@ import {
   findSimilarEdges,
   findSimilarNodes,
   type NodeSearchResult,
+  type EdgeSearchResult,
+  type OneHopNode,
 } from "../graph";
 import { performStructuredAnalysis } from "../ai";
-import { rerankMultiple } from "../rerank";
+import { rerankMultiple, type RerankResult } from "../rerank";
 import { DeepResearchJobInput, DeepResearchResult } from "../schemas/deep-research";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
 import { useDatabase } from "~/utils/db";
 import { env } from "~/utils/env";
+
+// Group definitions for reranked search results
+type SearchGroups = {
+  similarNodes: NodeSearchResult;
+  similarEdges: EdgeSearchResult;
+  connections: OneHopNode;
+};
 
 // Default TTL for deep research results (24 hours)
 const DEFAULT_TTL_SECONDS = 24 * 60 * 60;
@@ -106,7 +115,7 @@ async function executeDeepSearchQueries(
   db: DrizzleDB,
   userId: string,
   queries: string[]
-): Promise<string> {
+): Promise<RerankResult<SearchGroups>[]> {
   // Deep search uses higher limits than real-time search
   const deepSearchLimit = 20;
   
@@ -127,12 +136,8 @@ async function executeDeepSearchQueries(
     })
   );
   
-  // Combine all search results
-  const combinedResult = searchResults
-    .filter(Boolean)
-    .join("\n");
-    
-  return combinedResult || "";
+  // Filter out null results
+  return searchResults.filter(Boolean) as RerankResult<SearchGroups>[];
 }
 
 
@@ -146,7 +151,7 @@ async function executeSearchWithEmbedding(
   query: string,
   embedding: number[],
   limit: number
-): Promise<string | null> {
+): Promise<RerankResult<SearchGroups> | null> {
   try {
     // Find similar nodes and edges
     const [similarNodes, similarEdges] = await Promise.all([
@@ -194,7 +199,7 @@ async function executeSearchWithEmbedding(
       limit,
     );
 
-    return formatSearchResultsAsXml(rerankedResults);
+    return rerankedResults;
   } catch (error) {
     console.error("Error in executeSearchWithEmbedding:", error);
     return null;
@@ -207,9 +212,9 @@ async function executeSearchWithEmbedding(
 async function cacheDeepResearchResults(
   userId: string,
   conversationId: string,
-  formattedResult: string
+  results: RerankResult<SearchGroups>[]
 ): Promise<void> {
-  if (!formattedResult) {
+  if (!results || results.length === 0) {
     console.log("No results to cache for deep research");
     return;
   }
@@ -220,7 +225,7 @@ async function cacheDeepResearchResults(
   const result: DeepResearchResult = {
     userId,
     conversationId,
-    formattedResult,
+    results,
     timestamp: now,
     ttl,
   };

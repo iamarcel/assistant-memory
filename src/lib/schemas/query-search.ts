@@ -1,7 +1,7 @@
 import { EdgeTypeEnum, NodeTypeEnum } from "../../types/graph.js";
+import { rerankResultItemSchema } from "../schemas/rerank.js";
 import { z } from "zod";
 import { typeIdSchema } from "~/types/typeid.js";
-import { rerankResultItemSchema } from "../schemas/rerank.js";
 
 // Define the request schema
 export const querySearchRequestSchema = z.object({
@@ -18,7 +18,7 @@ export const querySearchRequestSchema = z.object({
 export const nodeSearchResultSchema = z.object({
   id: typeIdSchema("node"),
   type: NodeTypeEnum,
-  timestamp: z.date(),
+  timestamp: z.coerce.date(),
   label: z.string().nullable(),
   description: z.string().nullable(),
   similarity: z.number(),
@@ -33,13 +33,13 @@ export const edgeSearchResultSchema = z.object({
   edgeType: EdgeTypeEnum,
   description: z.string().nullable(),
   similarity: z.number(),
-  timestamp: z.date(),
+  timestamp: z.coerce.date(),
 });
 
 export const oneHopNodeSchema = z.object({
   id: typeIdSchema("node"),
   type: NodeTypeEnum,
-  timestamp: z.date(),
+  timestamp: z.coerce.date(),
   label: z.string().nullable(),
   description: z.string().nullable(),
   edgeSourceId: typeIdSchema("node"),

@@ -1,10 +1,5 @@
 import { generateEmbeddings } from "../embeddings";
-import { formatSearchResultsAsXml, type SearchResults } from "../formatting";
-import {
-  findOneHopNodes,
-  findSimilarEdges,
-  findSimilarNodes,
-} from "../graph";
+import { findOneHopNodes, findSimilarEdges, findSimilarNodes } from "../graph";
 import { rerankMultiple } from "../rerank";
 import {
   QuerySearchRequest,
@@ -17,7 +12,7 @@ import { useDatabase } from "~/utils/db";
  */
 export async function searchMemory(
   params: QuerySearchRequest,
-): Promise<Pick<QuerySearchResponse, 'query' | 'searchResults'>> {
+): Promise<Pick<QuerySearchResponse, "query" | "searchResults">> {
   const { userId, query, limit, excludeNodeTypes } = params;
   const db = await useDatabase();
 

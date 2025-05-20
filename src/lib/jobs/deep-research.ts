@@ -1,4 +1,4 @@
-import { addHours, formatISO } from "date-fns";
+import { performStructuredAnalysis } from "../ai";
 import { storeDeepResearchResult } from "../cache/deep-research-cache";
 import { generateEmbeddings } from "../embeddings";
 import {
@@ -9,13 +9,14 @@ import {
   type EdgeSearchResult,
   type OneHopNode,
 } from "../graph";
-import { performStructuredAnalysis } from "../ai";
 import { rerankMultiple, type RerankResult } from "../rerank";
-import { DeepResearchJobInput, DeepResearchResult } from "../schemas/deep-research";
+import {
+  DeepResearchJobInput,
+  DeepResearchResult,
+} from "../schemas/deep-research";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
 import { useDatabase } from "~/utils/db";
-import { env } from "~/utils/env";
 
 // Group definitions for reranked search results
 type SearchGroups = {
@@ -32,7 +33,7 @@ const DEFAULT_TTL_SECONDS = 24 * 60 * 60;
  * @param data Job parameters including userId, conversationId, messages, and lastNMessages
  */
 export async function performDeepResearch(
-  data: DeepResearchJobInput
+  data: DeepResearchJobInput,
 ): Promise<void> {
   const { userId, conversationId, messages, lastNMessages } = data;
   const db = await useDatabase();
@@ -44,9 +45,9 @@ export async function performDeepResearch(
     // Filter to only include user and assistant messages
     const recentMessages = messages
       .slice(-lastNMessages)
-      .filter(m => m.role === 'user' || m.role === 'assistant');
+      .filter((m) => m.role === "user" || m.role === "assistant");
     const queries = await generateSearchQueries(userId, recentMessages);
-    
+
     if (queries.length === 0) {
       console.log("No meaningful search queries generated for deep research");
       return;
@@ -54,13 +55,16 @@ export async function performDeepResearch(
 
     // Execute search queries and aggregate results
     const searchResults = await executeDeepSearchQueries(db, userId, queries);
-    
+
     // Process results and cache them
     await cacheDeepResearchResults(userId, conversationId, searchResults);
-    
+
     console.log(`Deep research completed for conversation ${conversationId}`);
   } catch (error) {
-    console.error(`Deep research failed for conversation ${conversationId}:`, error);
+    console.error(
+      `Deep research failed for conversation ${conversationId}:`,
+      error,
+    );
   }
 }
 
@@ -69,7 +73,7 @@ export async function performDeepResearch(
  */
 async function generateSearchQueries(
   userId: string,
-  messages: DeepResearchJobInput["messages"]
+  messages: DeepResearchJobInput["messages"],
 ): Promise<string[]> {
   const schema = z
     .object({ queries: z.array(z.string()).min(1).max(5) })
@@ -84,7 +88,8 @@ async function generateSearchQueries(
   try {
     const res = await performStructuredAnalysis({
       userId,
-      systemPrompt: "You are a helpful research assistant tasked with generating search queries based on a conversation.",
+      systemPrompt:
+        "You are a helpful research assistant tasked with generating search queries based on a conversation.",
       prompt: `<system:info>You are processing a conversation to identify important topics or questions that should be researched in depth.</system:info>
 
 <conversation>
@@ -98,7 +103,7 @@ Make the queries diverse and specific enough to retrieve focused results, but ge
 </system:instruction>`,
       schema,
     });
-    
+
     return res["queries"];
   } catch (error) {
     console.error("Failed to generate search queries:", error);
@@ -113,11 +118,11 @@ Make the queries diverse and specific enough to retrieve focused results, but ge
 async function executeDeepSearchQueries(
   db: DrizzleDB,
   userId: string,
-  queries: string[]
+  queries: string[],
 ): Promise<RerankResult<SearchGroups>[]> {
   // Deep search uses higher limits than real-time search
   const deepSearchLimit = 20;
-  
+
   // Run all search queries in parallel
   const searchResults = await Promise.all(
     queries.map(async (query) => {
@@ -130,16 +135,20 @@ async function executeDeepSearchQueries(
       });
       const embedding = embeddingsResponse.data[0]?.embedding;
       if (!embedding) return null;
-      
-      return executeSearchWithEmbedding(db, userId, query, embedding, deepSearchLimit);
-    })
+
+      return executeSearchWithEmbedding(
+        db,
+        userId,
+        query,
+        embedding,
+        deepSearchLimit,
+      );
+    }),
   );
-  
+
   // Filter out null results
   return searchResults.filter(Boolean) as RerankResult<SearchGroups>[];
 }
-
-
 
 /**
  * Execute a single search with the provided embedding
@@ -149,7 +158,7 @@ async function executeSearchWithEmbedding(
   userId: string,
   query: string,
   embedding: number[],
-  limit: number
+  limit: number,
 ): Promise<RerankResult<SearchGroups> | null> {
   try {
     // Find similar nodes and edges
@@ -211,7 +220,7 @@ async function executeSearchWithEmbedding(
 async function cacheDeepResearchResults(
   userId: string,
   conversationId: string,
-  results: RerankResult<SearchGroups>[]
+  results: RerankResult<SearchGroups>[],
 ): Promise<void> {
   if (!results || results.length === 0) {
     console.log("No results to cache for deep research");
@@ -220,10 +229,10 @@ async function cacheDeepResearchResults(
 
   // Flatten results
   const validResults = results.flat();
-  
+
   const ttl = DEFAULT_TTL_SECONDS;
   const now = new Date();
-  
+
   const result: DeepResearchResult = {
     userId,
     conversationId,
@@ -231,6 +240,6 @@ async function cacheDeepResearchResults(
     timestamp: now,
     ttl,
   };
-  
+
   await storeDeepResearchResult(result);
 }

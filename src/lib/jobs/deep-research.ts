@@ -218,13 +218,20 @@ async function cacheDeepResearchResults(
     return;
   }
 
+  // Filter out any invalid entries
+  const validResults = results.filter(array => 
+    Array.isArray(array) && array.every(item => 
+      typeof item === 'object' && item !== null && !Array.isArray(item)
+    )
+  ).flat();
+
   const ttl = DEFAULT_TTL_SECONDS;
   const now = new Date();
   
   const result: DeepResearchResult = {
     userId,
     conversationId,
-    results,
+    results: validResults,
     timestamp: now,
     ttl,
   };

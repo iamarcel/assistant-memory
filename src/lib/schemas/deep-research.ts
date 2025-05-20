@@ -1,4 +1,3 @@
-import { EdgeTypeEnum, NodeTypeEnum } from "../../types/graph.js";
 import { z } from "zod";
 import { MessageSchema } from "../jobs/ingest-conversation";
 import { searchResultsSchema } from "../schemas/query-search";
@@ -12,7 +11,7 @@ export const DeepResearchJobInputSchema = z.object({
 
 export type DeepResearchJobInput = z.infer<typeof DeepResearchJobInputSchema>;
 
-// Reuse the same SearchResults schema structure from query-search
+// Use the same SearchResults schema structure from query-search
 export const DeepResearchResultSchema = z.object({
   conversationId: z.string(),
   userId: z.string(),

@@ -1,4 +1,4 @@
-import { DeepResearchResult } from "../schemas/deep-research";
+import { DeepResearchResult, DeepResearchResultSchema } from "../schemas/deep-research";
 import { redisConnection } from "../queues";
 
 // Redis client from shared connection
@@ -26,6 +26,7 @@ export async function storeDeepResearchResult(
   const key = buildDeepResearchKey(userId, conversationId);
   
   try {
+    // Serialize with JSON
     await redisClient.set(key, JSON.stringify(result), "EX", ttl);
     console.log(`Stored deep research results for conversation ${conversationId}, expires in ${ttl}s`);
   } catch (error) {
@@ -47,10 +48,22 @@ export async function getDeepResearchResult(
     const data = await redisClient.get(key);
     if (!data) return null;
     
-    const result = JSON.parse(data) as DeepResearchResult;
+    // Parse the data and validate through schema to ensure correct structure
+    const parsedData = JSON.parse(data);
+    
     // Convert string timestamp back to Date object
-    result.timestamp = new Date(result.timestamp);
-    return result;
+    if (typeof parsedData.timestamp === 'string') {
+      parsedData.timestamp = new Date(parsedData.timestamp);
+    }
+    
+    // Fix any items that might have been serialized incorrectly
+    if (Array.isArray(parsedData.results)) {
+      parsedData.results = parsedData.results.filter(item => 
+        typeof item === 'object' && item !== null && !Array.isArray(item)
+      );
+    }
+    
+    return DeepResearchResultSchema.parse(parsedData);
   } catch (error) {
     console.error("Failed to retrieve deep research results:", error);
     return null;

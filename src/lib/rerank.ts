@@ -27,6 +27,14 @@ const RerankResponseSchema = z.object({
 
 type RerankResponse = z.infer<typeof RerankResponseSchema>;
 
+// Generic Zod schema for RerankResult items
+export const rerankResultItemSchema = <T extends z.ZodTypeAny>(itemSchema: T) => 
+  z.object({
+    group: z.string(),
+    item: itemSchema,
+    relevance_score: z.number(),
+  });
+
 export const rerank = async (req: RerankRequest): Promise<RerankResponse> => {
   const validated = RerankRequestSchema.parse(req);
 

@@ -1,6 +1,7 @@
 import { EdgeTypeEnum, NodeTypeEnum } from "../../types/graph.js";
 import { z } from "zod";
 import { typeIdSchema } from "~/types/typeid.js";
+import { rerankResultItemSchema } from "../rerank.js";
 
 // Define the request schema
 export const querySearchRequestSchema = z.object({
@@ -14,7 +15,7 @@ export const querySearchRequestSchema = z.object({
 });
 
 // Define schemas for the search result types
-const nodeSearchResultSchema = z.object({
+export const nodeSearchResultSchema = z.object({
   id: typeIdSchema("node"),
   type: NodeTypeEnum,
   timestamp: z.date(),
@@ -23,7 +24,7 @@ const nodeSearchResultSchema = z.object({
   similarity: z.number(),
 });
 
-const edgeSearchResultSchema = z.object({
+export const edgeSearchResultSchema = z.object({
   id: typeIdSchema("edge"),
   sourceNodeId: typeIdSchema("node"),
   targetNodeId: typeIdSchema("node"),
@@ -35,7 +36,7 @@ const edgeSearchResultSchema = z.object({
   timestamp: z.date(),
 });
 
-const oneHopNodeSchema = z.object({
+export const oneHopNodeSchema = z.object({
   id: typeIdSchema("node"),
   type: NodeTypeEnum,
   timestamp: z.date(),
@@ -49,21 +50,15 @@ const oneHopNodeSchema = z.object({
 });
 
 // Define the discriminated union for search results
-const searchResultItemSchema = z.discriminatedUnion("group", [
-  z.object({
+export const searchResultItemSchema = z.discriminatedUnion("group", [
+  rerankResultItemSchema(nodeSearchResultSchema).extend({
     group: z.literal("similarNodes"),
-    item: nodeSearchResultSchema,
-    relevance_score: z.number(),
   }),
-  z.object({
+  rerankResultItemSchema(edgeSearchResultSchema).extend({
     group: z.literal("similarEdges"),
-    item: edgeSearchResultSchema,
-    relevance_score: z.number(),
   }),
-  z.object({
+  rerankResultItemSchema(oneHopNodeSchema).extend({
     group: z.literal("connections"),
-    item: oneHopNodeSchema,
-    relevance_score: z.number(),
   }),
 ]);
 

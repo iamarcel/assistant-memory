@@ -33,7 +33,10 @@ export async function performDeepResearch(
 
   try {
     // Get search queries based on recent conversation turns
-    const recentMessages = messages.slice(-lastNMessages);
+    // Filter to only include user and assistant messages
+    const recentMessages = messages
+      .slice(-lastNMessages)
+      .filter(m => m.role === 'user' || m.role === 'assistant');
     const queries = await generateSearchQueries(userId, recentMessages);
     
     if (queries.length === 0) {

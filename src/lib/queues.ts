@@ -104,16 +104,26 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           // Simple throttling: add a low probability to reduce job frequency
           // This helps prevent too many jobs for users with many short conversations
           if (Math.random() < env.DEEP_RESEARCH_PROBABILITY || 0.5) {
-            await batchQueue.add("deep-research", {
-              userId,
-              conversationId,
-              messages,
-              lastNMessages: 3,
-            }, {
-              removeOnComplete: true,
-              removeOnFail: 50,
-            });
-            console.log(`Queued deep research job for conversation ${conversationId}`);
+            // Create a deterministic job ID to prevent duplicate jobs
+            const jobId = `deep-research:${userId}:${conversationId}`;
+            
+            // Check if job already exists before adding
+            const existingJob = await batchQueue.getJob(jobId);
+            if (!existingJob) {
+              await batchQueue.add("deep-research", {
+                userId,
+                conversationId,
+                messages,
+                lastNMessages: 3,
+              }, {
+                jobId,
+                removeOnComplete: true,
+                removeOnFail: 50,
+              });
+              console.log(`Queued deep research job for conversation ${conversationId}`);
+            } else {
+              console.log(`Skipping duplicate deep research job for conversation ${conversationId}`);
+            }
           }
         }
       } else if (job.name === "deep-research") {

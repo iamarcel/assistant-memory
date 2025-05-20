@@ -24,6 +24,7 @@ export default defineEventHandler(async (event) => {
   if (!conversationId) {
     return querySearchResponseSchema.parse({
       query,
+      searchResults,
       formattedResult: formatSearchResultsAsXml(searchResults)
     });
   }
@@ -35,6 +36,7 @@ export default defineEventHandler(async (event) => {
   if (!deepResults) {
     return querySearchResponseSchema.parse({
       query,
+      searchResults,
       formattedResult: formatSearchResultsAsXml(searchResults)
     });
   }
@@ -47,6 +49,7 @@ export default defineEventHandler(async (event) => {
 
   return querySearchResponseSchema.parse({
     query,
+    searchResults: combinedResults,
     formattedResult
   });
 });

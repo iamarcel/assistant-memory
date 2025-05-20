@@ -17,7 +17,7 @@ import { useDatabase } from "~/utils/db";
  */
 export async function searchMemory(
   params: QuerySearchRequest,
-): Promise<{ query: string, searchResults: SearchResults }> {
+): Promise<Pick<QuerySearchResponse, 'query' | 'searchResults'>> {
   const { userId, query, limit, excludeNodeTypes } = params;
   const db = await useDatabase();
 

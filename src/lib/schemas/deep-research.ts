@@ -10,11 +10,24 @@ export const DeepResearchJobInputSchema = z.object({
 
 export type DeepResearchJobInput = z.infer<typeof DeepResearchJobInputSchema>;
 
-// Since we can't define a circular type directly in Zod, we use a more generic structure
-// that can represent our RerankResult<SearchGroups> type
+// Since we can't define a circular type directly in Zod, we use a more specific structure
+// that represents our RerankResult item structure
+const ItemSchema = z.object({
+  id: z.string().optional(),
+  type: z.string().optional(),
+  label: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  timestamp: z.date().or(z.string()).optional(),
+  sourceNodeId: z.string().optional(),
+  targetNodeId: z.string().optional(),
+  sourceLabel: z.string().nullable().optional(),
+  targetLabel: z.string().nullable().optional(),
+  edgeType: z.string().optional(),
+}).passthrough(); // Allow additional properties for flexibility
+
 const RerankResultItemSchema = z.object({
   group: z.string(),
-  item: z.any(),
+  item: ItemSchema,
   relevance_score: z.number(),
 });
 

@@ -1,5 +1,6 @@
 import { NodeTypeEnum } from "../../types/graph.js";
 import { z } from "zod";
+import type { SearchResults } from "../formatting";
 
 // Define the request schema
 export const querySearchRequestSchema = z.object({
@@ -15,7 +16,10 @@ export const querySearchRequestSchema = z.object({
 export const querySearchResponseSchema = z.object({
   query: z.string(),
   formattedResult: z.string(),
+  searchResults: z.any(), // This is a placeholder for the SearchResults type that can't be directly represented in Zod
 });
 
 export type QuerySearchRequest = z.infer<typeof querySearchRequestSchema>;
-export type QuerySearchResponse = z.infer<typeof querySearchResponseSchema>;
+export type QuerySearchResponse = z.infer<typeof querySearchResponseSchema> & {
+  searchResults: SearchResults;
+};

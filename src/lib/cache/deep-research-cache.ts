@@ -1,15 +1,8 @@
-import IORedis from "ioredis";
 import { DeepResearchResult } from "../schemas/deep-research";
-import { env } from "~/utils/env";
+import { redisConnection } from "../queues";
 
-// Redis client setup with default configuration
-const redisClient = new IORedis(env.REDIS_URL, {
-  maxRetriesPerRequest: null,
-});
-
-redisClient.on("error", (err) => {
-  console.error("Deep research Redis cache error:", err);
-});
+// Redis client from shared connection
+const redisClient = redisConnection;
 
 /**
  * Prefix for deep research cache keys to avoid collisions

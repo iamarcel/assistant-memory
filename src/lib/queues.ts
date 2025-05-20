@@ -12,18 +12,18 @@ import { useDatabase } from "~/utils/db";
 import { env } from "~/utils/env";
 
 // Define connection options using environment variables
-const connection = new IORedis(env.REDIS_URL, {
+export const redisConnection = new IORedis(env.REDIS_URL, {
   maxRetriesPerRequest: null, // Important for BullMQ
 });
 
-connection.on("error", (err) => {
+redisConnection.on("error", (err) => {
   console.error("Redis connection error:", err);
 });
 
 // Create the main batch processing queue
-export const batchQueue = new Queue("batchProcessing", { connection });
+export const batchQueue = new Queue("batchProcessing", { connection: redisConnection });
 
-export const flowProducer = new FlowProducer({ connection });
+export const flowProducer = new FlowProducer({ connection: redisConnection });
 
 // Define Job Data Schemas (using Zod could be an option here too)
 interface SummarizeJobData {
@@ -181,7 +181,7 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
       throw error;
     }
   },
-  { connection },
+  { connection: redisConnection },
 );
 
 console.log("BullMQ Worker started for batchProcessing queue.");
@@ -190,7 +190,7 @@ console.log("BullMQ Worker started for batchProcessing queue.");
 process.on("SIGTERM", async () => {
   console.log("SIGTERM received, shutting down BullMQ worker...");
   await worker.close();
-  await connection.quit();
+  await redisConnection.quit();
   console.log("BullMQ shutdown complete.");
   process.exit(0);
 });
@@ -198,7 +198,7 @@ process.on("SIGTERM", async () => {
 process.on("SIGINT", async () => {
   console.log("SIGINT received, shutting down BullMQ worker...");
   await worker.close();
-  await connection.quit();
+  await redisConnection.quit();
   console.log("BullMQ shutdown complete.");
   process.exit(0);
 });

@@ -2,6 +2,7 @@ import { assistantDreamJob } from "./jobs/atlas-assistant";
 import { processAtlasJob } from "./jobs/atlas-user";
 import { CleanupGraphJobInputSchema } from "./jobs/cleanup-graph";
 import { dream } from "./jobs/dream";
+import { DeepResearchJobInputSchema } from "./schemas/deep-research";
 import { IngestConversationJobInputSchema } from "./jobs/ingest-conversation";
 import { IngestDocumentJobInputSchema } from "./jobs/ingest-document";
 import { summarizeUserConversations } from "./jobs/summarize-conversation";
@@ -11,18 +12,18 @@ import { useDatabase } from "~/utils/db";
 import { env } from "~/utils/env";
 
 // Define connection options using environment variables
-const connection = new IORedis(env.REDIS_URL, {
+export const redisConnection = new IORedis(env.REDIS_URL, {
   maxRetriesPerRequest: null, // Important for BullMQ
 });
 
-connection.on("error", (err) => {
+redisConnection.on("error", (err) => {
   console.error("Redis connection error:", err);
 });
 
 // Create the main batch processing queue
-export const batchQueue = new Queue("batchProcessing", { connection });
+export const batchQueue = new Queue("batchProcessing", { connection: redisConnection });
 
-export const flowProducer = new FlowProducer({ connection });
+export const flowProducer = new FlowProducer({ connection: redisConnection });
 
 // Define Job Data Schemas (using Zod could be an option here too)
 interface SummarizeJobData {
@@ -97,6 +98,53 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
         console.log(
           `Ingested conversation ${conversationId} for user ${userId}.`,
         );
+        
+        // Queue deep research job if there are messages
+        if (messages.length > 0) {
+          // Simple throttling: add a low probability to reduce job frequency
+          // This helps prevent too many jobs for users with many short conversations
+          if (Math.random() < env.DEEP_RESEARCH_PROBABILITY || 0.5) {
+            // Create a deterministic job ID to prevent duplicate jobs
+            const jobId = `deep-research:${userId}:${conversationId}`;
+            
+            // Check if job already exists before adding
+            const existingJob = await batchQueue.getJob(jobId);
+            if (!existingJob) {
+              await batchQueue.add("deep-research", {
+                userId,
+                conversationId,
+                messages,
+                lastNMessages: 3,
+              }, {
+                jobId,
+                removeOnComplete: true,
+                removeOnFail: 50,
+              });
+              console.log(`Queued deep research job for conversation ${conversationId}`);
+            } else {
+              console.log(`Skipping duplicate deep research job for conversation ${conversationId}`);
+            }
+          }
+        }
+      } else if (job.name === "deep-research") {
+        const { userId, conversationId, messages, lastNMessages } =
+          DeepResearchJobInputSchema.parse(job.data);
+        console.log(
+          `Starting deep-research job for user ${userId}, conversation ${conversationId}`,
+        );
+
+        const { performDeepResearch } = await import(
+          "./jobs/deep-research"
+        );
+        await performDeepResearch({
+          userId,
+          conversationId,
+          messages,
+          lastNMessages,
+        });
+        console.log(
+          `Completed deep research for conversation ${conversationId} for user ${userId}.`,
+        );
       } else if (job.name === "ingest-document") {
         const { userId, documentId, content, timestamp } =
           IngestDocumentJobInputSchema.parse(job.data);
@@ -143,7 +191,7 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
       throw error;
     }
   },
-  { connection },
+  { connection: redisConnection },
 );
 
 console.log("BullMQ Worker started for batchProcessing queue.");
@@ -152,7 +200,7 @@ console.log("BullMQ Worker started for batchProcessing queue.");
 process.on("SIGTERM", async () => {
   console.log("SIGTERM received, shutting down BullMQ worker...");
   await worker.close();
-  await connection.quit();
+  await redisConnection.quit();
   console.log("BullMQ shutdown complete.");
   process.exit(0);
 });
@@ -160,7 +208,7 @@ process.on("SIGTERM", async () => {
 process.on("SIGINT", async () => {
   console.log("SIGINT received, shutting down BullMQ worker...");
   await worker.close();
-  await connection.quit();
+  await redisConnection.quit();
   console.log("BullMQ shutdown complete.");
   process.exit(0);
 });

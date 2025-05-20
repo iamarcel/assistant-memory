@@ -1,7 +1,7 @@
 import { EdgeTypeEnum, NodeTypeEnum } from "../../types/graph.js";
+import { typeIdSchema } from "../../types/typeid.js";
 import { rerankResultItemSchema } from "../schemas/rerank.js";
 import { z } from "zod";
-import { typeIdSchema } from "~/types/typeid.js";
 
 // Define the request schema
 export const querySearchRequestSchema = z.object({

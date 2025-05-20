@@ -43,9 +43,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Combine standard and deep research results before formatting
-  // Ensure all results are properly structured objects
-  const combinedResults = [...searchResults, ...deepResults.results]
-    .filter(item => typeof item === 'object' && item !== null && !Array.isArray(item));
+  const combinedResults = [...searchResults, ...deepResults.results];
   
   // Validate combined results through the schema
   const validatedResults = searchResultsSchema.parse(combinedResults);

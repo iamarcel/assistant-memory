@@ -51,18 +51,7 @@ export async function getDeepResearchResult(
     // Parse the data and validate through schema to ensure correct structure
     const parsedData = JSON.parse(data);
     
-    // Convert string timestamp back to Date object
-    if (typeof parsedData.timestamp === 'string') {
-      parsedData.timestamp = new Date(parsedData.timestamp);
-    }
-    
-    // Fix any items that might have been serialized incorrectly
-    if (Array.isArray(parsedData.results)) {
-      parsedData.results = parsedData.results.filter(item => 
-        typeof item === 'object' && item !== null && !Array.isArray(item)
-      );
-    }
-    
+    // Use Zod to validate and convert data (timestamp conversion happens automatically)
     return DeepResearchResultSchema.parse(parsedData);
   } catch (error) {
     console.error("Failed to retrieve deep research results:", error);

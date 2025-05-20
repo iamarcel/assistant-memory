@@ -16,7 +16,7 @@ export const DeepResearchResultSchema = z.object({
   conversationId: z.string(),
   userId: z.string(),
   results: searchResultsSchema,
-  timestamp: z.date(),
+  timestamp: z.coerce.date(), // Use coerce to automatically convert string to Date
   ttl: z.number().int().positive(),
 });
 

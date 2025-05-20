@@ -218,13 +218,9 @@ async function cacheDeepResearchResults(
     return;
   }
 
-  // Filter out any invalid entries
-  const validResults = results.filter(array => 
-    Array.isArray(array) && array.every(item => 
-      typeof item === 'object' && item !== null && !Array.isArray(item)
-    )
-  ).flat();
-
+  // Flatten results
+  const validResults = results.flat();
+  
   const ttl = DEFAULT_TTL_SECONDS;
   const now = new Date();
   

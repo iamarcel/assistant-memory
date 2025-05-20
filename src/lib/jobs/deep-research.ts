@@ -113,7 +113,14 @@ async function executeDeepSearchQueries(
   // Run all search queries in parallel
   const searchResults = await Promise.all(
     queries.map(async (query) => {
-      const embedding = await generateQueryEmbedding(query);
+      // Reuse same embedding generation from searchMemory function
+      const embeddingsResponse = await generateEmbeddings({
+        model: "jina-embeddings-v3",
+        task: "retrieval.query",
+        input: [query],
+        truncate: true,
+      });
+      const embedding = embeddingsResponse.data[0]?.embedding;
       if (!embedding) return null;
       
       return executeSearchWithEmbedding(db, userId, query, embedding, deepSearchLimit);
@@ -128,24 +135,7 @@ async function executeDeepSearchQueries(
   return combinedResult || "";
 }
 
-/**
- * Generate embedding for search query
- */
-async function generateQueryEmbedding(query: string): Promise<number[] | null> {
-  try {
-    const embeddingsResponse = await generateEmbeddings({
-      model: "jina-embeddings-v3",
-      task: "retrieval.query",
-      input: [query],
-      truncate: true,
-    });
-    
-    return embeddingsResponse.data[0]?.embedding || null;
-  } catch (error) {
-    console.error("Failed to generate embedding for query:", error);
-    return null;
-  }
-}
+
 
 /**
  * Execute a single search with the provided embedding

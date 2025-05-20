@@ -1,7 +1,6 @@
 import { addHours, formatISO } from "date-fns";
 import { storeDeepResearchResult } from "../cache/deep-research-cache";
 import { generateEmbeddings } from "../embeddings";
-import { formatSearchResultsAsXml } from "../formatting";
 import {
   findOneHopNodes,
   findSimilarEdges,

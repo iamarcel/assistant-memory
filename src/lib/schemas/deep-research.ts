@@ -1,5 +1,7 @@
+import { EdgeTypeEnum, NodeTypeEnum } from "../../types/graph.js";
 import { z } from "zod";
 import { MessageSchema } from "../jobs/ingest-conversation";
+import { searchResultsSchema } from "../schemas/query-search";
 
 export const DeepResearchJobInputSchema = z.object({
   userId: z.string(),
@@ -10,31 +12,11 @@ export const DeepResearchJobInputSchema = z.object({
 
 export type DeepResearchJobInput = z.infer<typeof DeepResearchJobInputSchema>;
 
-// Since we can't define a circular type directly in Zod, we use a more specific structure
-// that represents our RerankResult item structure
-const ItemSchema = z.object({
-  id: z.string().optional(),
-  type: z.string().optional(),
-  label: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
-  timestamp: z.date().or(z.string()).optional(),
-  sourceNodeId: z.string().optional(),
-  targetNodeId: z.string().optional(),
-  sourceLabel: z.string().nullable().optional(),
-  targetLabel: z.string().nullable().optional(),
-  edgeType: z.string().optional(),
-}).passthrough(); // Allow additional properties for flexibility
-
-const RerankResultItemSchema = z.object({
-  group: z.string(),
-  item: ItemSchema,
-  relevance_score: z.number(),
-});
-
+// Reuse the same SearchResults schema structure from query-search
 export const DeepResearchResultSchema = z.object({
   conversationId: z.string(),
   userId: z.string(),
-  results: z.array(RerankResultItemSchema),
+  results: searchResultsSchema,
   timestamp: z.date(),
   ttl: z.number().int().positive(),
 });

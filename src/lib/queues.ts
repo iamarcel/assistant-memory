@@ -2,6 +2,7 @@ import { assistantDreamJob } from "./jobs/atlas-assistant";
 import { processAtlasJob } from "./jobs/atlas-user";
 import { CleanupGraphJobInputSchema } from "./jobs/cleanup-graph";
 import { dream } from "./jobs/dream";
+import { DeepResearchJobInputSchema } from "./schemas/deep-research";
 import { IngestConversationJobInputSchema } from "./jobs/ingest-conversation";
 import { IngestDocumentJobInputSchema } from "./jobs/ingest-document";
 import { summarizeUserConversations } from "./jobs/summarize-conversation";
@@ -96,6 +97,43 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
         });
         console.log(
           `Ingested conversation ${conversationId} for user ${userId}.`,
+        );
+        
+        // Queue deep research job if there are messages
+        if (messages.length > 0) {
+          // Simple throttling: add a low probability to reduce job frequency
+          // This helps prevent too many jobs for users with many short conversations
+          if (Math.random() < env.DEEP_RESEARCH_PROBABILITY || 0.5) {
+            await batchQueue.add("deep-research", {
+              userId,
+              conversationId,
+              messages,
+              lastNMessages: 3,
+            }, {
+              removeOnComplete: true,
+              removeOnFail: 50,
+            });
+            console.log(`Queued deep research job for conversation ${conversationId}`);
+          }
+        }
+      } else if (job.name === "deep-research") {
+        const { userId, conversationId, messages, lastNMessages } =
+          DeepResearchJobInputSchema.parse(job.data);
+        console.log(
+          `Starting deep-research job for user ${userId}, conversation ${conversationId}`,
+        );
+
+        const { performDeepResearch } = await import(
+          "./jobs/deep-research"
+        );
+        await performDeepResearch({
+          userId,
+          conversationId,
+          messages,
+          lastNMessages,
+        });
+        console.log(
+          `Completed deep research for conversation ${conversationId} for user ${userId}.`,
         );
       } else if (job.name === "ingest-document") {
         const { userId, documentId, content, timestamp } =

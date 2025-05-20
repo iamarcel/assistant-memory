@@ -32,6 +32,7 @@ const envSchema = z.object({
 
   DREAM_PROBABILITY: z.coerce.number().default(0.1),
   DREAM_SELECTION_PROBABILITY: z.coerce.number().default(0.4),
+  DEEP_RESEARCH_PROBABILITY: z.coerce.number().default(0.5),
 });
 
 export const env = envSchema.parse(process.env);

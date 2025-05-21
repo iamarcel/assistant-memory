@@ -1,9 +1,9 @@
-import contentType from "content-type";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   JSONRPCMessage,
   JSONRPCMessageSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import contentType from "content-type";
 import { Encoding, EventHandlerRequest, EventStream, H3Event } from "h3";
 import { v7 as uuid } from "uuid";
 
@@ -13,7 +13,7 @@ import { v7 as uuid } from "uuid";
  * This transport is only available in Node.js environments.
  */
 export class SSEServerTransport implements Transport {
-  private _stream: EventStream;
+  private _stream?: EventStream | undefined;
   private _sessionId: string;
 
   onclose?: () => void;
@@ -23,7 +23,10 @@ export class SSEServerTransport implements Transport {
   /**
    * Creates a new SSE server transport, which will direct the client to POST messages to the relative or absolute URL identified by `_endpoint`.
    */
-  constructor(private _endpoint: string, private stream: EventStream) {
+  constructor(
+    private _endpoint: string,
+    private stream: EventStream,
+  ) {
     this._sessionId = uuid();
   }
 
@@ -35,7 +38,7 @@ export class SSEServerTransport implements Transport {
   async start(): Promise<void> {
     if (this._stream) {
       throw new Error(
-        "SSEServerTransport already started! If using Server class, note that connect() calls start() automatically."
+        "SSEServerTransport already started! If using Server class, note that connect() calls start() automatically.",
       );
     }
 
@@ -85,7 +88,7 @@ export class SSEServerTransport implements Transport {
 
       body = await readRawBody(
         event,
-        (ct.parameters.charset ?? "utf8") as Encoding
+        (ct.parameters["charset"] ?? "utf8") as Encoding,
       );
     } catch (error) {
       throw createError({
@@ -97,7 +100,7 @@ export class SSEServerTransport implements Transport {
 
     try {
       await this.handleMessage(
-        typeof body === "string" ? JSON.parse(body) : body
+        typeof body === "string" ? JSON.parse(body) : body,
       );
     } catch {
       throw createError({

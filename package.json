@@ -18,12 +18,16 @@
       "types": "./dist/sdk/*.d.ts"
     }
   },
+  "bin": {
+    "memory-stdio": "dist/cli.mjs"
+  },
   "files": [
     "dist"
   ],
   "scripts": {
     "build": "nitro build",
     "build-sdk": "tsc --project tsconfig.sdk.json",
+    "build-cli": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=es2022 --outfile=dist/cli.mjs --tsconfig=tsconfig.cli.json",
     "dev": "nitro dev",
     "prepare": "nitro prepare",
     "preview": "node .output/server/index.mjs",

@@ -1,30 +1,35 @@
 # Assistant Memory
 
-_Give your assistant perfect memory, and still own the data._
+_Give your assistant perfect memory while keeping full control of your data._
 
-This project is a web server you can use to augment any LLM assistant with permanent memory. It's supposed to be deployed in the backend of your application (eg., in a private network of a docker-compose application).
+Assistant Memory is a lightweight memory service built around the **Model Context Protocol (MCP)**. It speaks MCP over HTTP today (stdio support is on the way) and also exposes classic REST endpoints. Store conversations and documents and let any MCP‑enabled assistant recall them when needed.
 
-Here's how it works:
+## Model Context Protocol
 
-- Use the `/ingest/*` endpoints to add information
-- Use the `/query/*` endpoints to retrieve information
+The integrated MCP server provides tools for saving memories, performing searches and retrieving day summaries. Because it follows the MCP standard, any compliant client can plug in and exchange messages seamlessly.
 
-There are different kinds of information that can be ingested and different ways to query it.
+## Recommended usage
 
-## How is the information stored and organized?
+Run ingestion and queries in the background as your chat happens:
 
-All the information that's ingested is ran through an LLM to extract the most important information, and stored in a graph-based database. Entities, events, people, dates, etc., are stored and linked in the graph.
+1. **Ingest** every message to keep the graph up to date.
+2. **Query** for relevant memories just before each LLM call and merge the results into your prompt.
 
-## How does querying work?
+This background workflow is independent of MCP and works with any LLM‑based assistant.
 
-The `search` query endpoint queries nodes based on vector similarity, and returns some context based on the graph relations.
+## HTTP API
 
-This is useful to add inside of the chat loop with an assistant: right before sending the messages to the LLM, insert some context retrieved from this endpoint.
+- `POST /ingest/conversation` and `POST /ingest/document` – send new information to be stored.
+- `POST /query/search` – vector search to retrieve relevant nodes.
+- `POST /query/day` – get a quick summary of a particular day.
+- `GET /sse` and `POST /messages` – MCP over HTTP using Server‑Sent Events.
 
-The `day` query endpoint is purely graph-based and returns a context description based on the nodes linked to a specific day.
+## Why use it?
 
-This can be used, for example, in the first message with an assistant so it knows what's been happening today and yesterday.
+- Keep sensitive data on your own servers.
+- Turn large transcripts and documents into a searchable graph.
+- Drop in as a microservice alongside your existing assistant.
 
-## MCP Server
+---
 
-An MCP server is also exposed so the assistant can explicitly query for data as well.
+Spin it up with `docker-compose up` and start talking. Your assistant will finally remember everything.

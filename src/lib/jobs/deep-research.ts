@@ -9,7 +9,7 @@ import {
   type EdgeSearchResult,
   type OneHopNode,
 } from "../graph";
-import { rerankMultiple, type RerankResult } from "../rerank";
+import { type RerankResult } from "../rerank";
 import {
   DeepResearchJobInput,
   DeepResearchResult,
@@ -17,6 +17,7 @@ import {
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
 import { useDatabase } from "~/utils/db";
+import { shuffleArray } from "~/utils/shuffle";
 
 // Group definitions for reranked search results
 type SearchGroups = {
@@ -84,22 +85,20 @@ async function generateSearchQueries(
     .map((m) => `<message role="${m.role}">${m.content}</message>`)
     .join("\n");
 
-  // Use structured analysis to generate meaningful search queries
+  // Use structured analysis to generate tangential search queries
   try {
     const res = await performStructuredAnalysis({
       userId,
       systemPrompt:
-        "You are a helpful research assistant tasked with generating search queries based on a conversation.",
-      prompt: `<system:info>You are processing a conversation to identify important topics or questions that should be researched in depth.</system:info>
+        "You are an imaginative research assistant generating tangential search queries.",
+      prompt: `<system:info>You are processing a conversation and want to find interesting background or related topics that are not necessarily direct continuations.</system:info>
 
 <conversation>
 ${messageContext}
 </conversation>
 
 <system:instruction>
-Based on the conversation above, generate 1-5 search queries that would be useful for retrieving relevant information from a knowledge base. Focus on the most important topics, questions, or information needs expressed in the conversation.
-
-Make the queries diverse and specific enough to retrieve focused results, but general enough to capture relevant information.
+Come up with 1-5 search queries that explore adjacent or less obvious connections to the conversation. Avoid simply rephrasing what was said. Think of historical context, supporting facts or surprising angles that could provide useful background knowledge.
 </system:instruction>`,
       schema,
     });
@@ -185,29 +184,29 @@ async function executeSearchWithEmbedding(
 
     const connections = await findOneHopNodes(db, userId, Array.from(nodeIds));
 
-    // Rerank results
-    const rerankedResults = await rerankMultiple(
-      query,
-      {
-        similarNodes: {
-          items: similarNodes,
-          toDocument: (n) => `${n.label}: ${n.description}`,
-        },
-        similarEdges: {
-          items: similarEdges,
-          toDocument: (e) =>
-            `${e.sourceLabel ?? ""} -> ${e.targetLabel ?? ""}: ${e.edgeType}` +
-            (e.description ? `: ${e.description}` : ""),
-        },
-        connections: {
-          items: connections,
-          toDocument: (c) => `${c.label}: ${c.description}`,
-        },
-      },
-      limit,
-    );
+    // Build search result items without reranking
+    const allResults: RerankResult<SearchGroups> = [
+      ...similarNodes.map((n) => ({
+        group: "similarNodes",
+        item: n,
+        relevance_score: n.similarity,
+      })),
+      ...similarEdges.map((e) => ({
+        group: "similarEdges",
+        item: e,
+        relevance_score: e.similarity,
+      })),
+      ...connections.map((c) => ({
+        group: "connections",
+        item: c,
+        relevance_score: 0,
+      })),
+    ];
 
-    return rerankedResults;
+    // Randomize before applying the limit
+    const results = shuffleArray(allResults).slice(0, limit);
+
+    return results;
   } catch (error) {
     console.error("Error in executeSearchWithEmbedding:", error);
     return null;

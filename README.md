@@ -1,6 +1,6 @@
 # Assistant Memory
 
-_Give your assistant perfect memory while keeping full control of your data._
+_Give all your AI assistants **combined, long-term** memory while keeping full control of your data._
 
 Assistant Memory is a lightweight memory service built around the **Model Context Protocol (MCP)**. It speaks MCP over HTTP today (stdio support is on the way) and also exposes classic REST endpoints. Store conversations and documents and let any MCP‑enabled assistant recall them when needed.
 

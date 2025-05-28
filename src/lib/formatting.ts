@@ -91,7 +91,6 @@ ${xmlItems}
 </items>`;
 }
 
-
 // Group definitions for reranked search results
 type SearchGroups = {
   similarNodes: NodeSearchResult;
@@ -144,6 +143,34 @@ export function formatSearchResultsAsXml(results: SearchResults): string {
             case "connections":
               return formatSearchConnection(r.item);
           }
+        })
+        .join("\n")
+    : "";
+  return body;
+}
+
+export type SearchResultWithId = SearchResults[number] & { tempId: string };
+
+/**
+ * Format search results with temporary IDs so the LLM can reference them.
+ */
+export function formatSearchResultsWithIds(
+  results: SearchResultWithId[],
+): string {
+  const body = results.length
+    ? results
+        .map((r) => {
+          const inner = (() => {
+            switch (r.group) {
+              case "similarNodes":
+                return formatSearchNode(r.item);
+              case "similarEdges":
+                return formatSearchEdge(r.item);
+              case "connections":
+                return formatSearchConnection(r.item);
+            }
+          })();
+          return `<result id="${escapeXml(r.tempId)}">${inner}</result>`;
         })
         .join("\n")
     : "";

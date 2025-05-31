@@ -1,6 +1,5 @@
 import { formatISO } from "date-fns";
 import type {
-  NodeWithConnections,
   NodeSearchResult,
   EdgeSearchResult,
   OneHopNode,

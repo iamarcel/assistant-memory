@@ -105,7 +105,7 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
         if (messages.length > 0) {
           // Simple throttling: add a low probability to reduce job frequency
           // This helps prevent too many jobs for users with many short conversations
-          if (Math.random() < env.DEEP_RESEARCH_PROBABILITY || 0.5) {
+          if (Math.random() < (env.DEEP_RESEARCH_PROBABILITY || 0.5)) {
             // Create a deterministic job ID to prevent duplicate jobs
             const jobId = `deep-research:${userId}:${conversationId}`;
 

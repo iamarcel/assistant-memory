@@ -2,7 +2,6 @@ import { findDayNode } from "../graph";
 import { QueryDayRequest, QueryDayResponse } from "../schemas/query-day";
 import { and, eq, ne, or } from "drizzle-orm";
 import { edges, nodeMetadata, nodes } from "~/db/schema";
-import { EdgeType } from "~/types/graph";
 import { useDatabase } from "~/utils/db";
 
 /**

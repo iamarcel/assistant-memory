@@ -30,7 +30,9 @@
     "tsx": "tsx",
     "test": "vitest",
     "lint": "eslint src --ext .js,.mjs,.cjs,.ts",
+    "lint:fix": "eslint src --ext .js,.mjs,.cjs,.ts --fix",
     "format": "prettier --check .",
+    "format:fix": "prettier --write .",
     "drizzle:push": "drizzle-kit push",
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:migrate": "drizzle-kit migrate",
@@ -72,7 +74,9 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "@parcel/watcher",
+      "esbuild",
+      "msgpackr-extract"
     ]
   }
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 import { describe, expect, it } from "vitest";
 
 describe("Atlas Improvements", () => {

@@ -14,8 +14,8 @@ export const queryDayResponseNodeSchema = z.object({
   id: typeIdSchema("node"),
   nodeType: NodeTypeEnum,
   metadata: z.object({
-    label: z.string().optional(),
-    description: z.string().optional(),
+    label: z.string().nullable(),
+    description: z.string().nullable(),
   }),
   edgeType: EdgeTypeEnum,
 });

@@ -46,12 +46,8 @@
           "name": "aliases_user_id_users_id_fk",
           "tableFrom": "aliases",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -59,12 +55,8 @@
           "name": "aliases_canonical_node_id_nodes_id_fk",
           "tableFrom": "aliases",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "canonical_node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["canonical_node_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -193,12 +185,8 @@
           "name": "edges_user_id_users_id_fk",
           "tableFrom": "edges",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -206,12 +194,8 @@
           "name": "edges_source_node_id_nodes_id_fk",
           "tableFrom": "edges",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "source_node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_node_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -219,12 +203,8 @@
           "name": "edges_target_node_id_nodes_id_fk",
           "tableFrom": "edges",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "target_node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["target_node_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -234,10 +214,7 @@
         "edges_sourceNodeId_targetNodeId_unique": {
           "name": "edges_sourceNodeId_targetNodeId_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "source_node_id",
-            "target_node_id"
-          ]
+          "columns": ["source_node_id", "target_node_id"]
         }
       },
       "policies": {},
@@ -318,12 +295,8 @@
           "name": "node_embeddings_node_id_nodes_id_fk",
           "tableFrom": "node_embeddings",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["node_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -398,12 +371,8 @@
           "name": "node_metadata_node_id_nodes_id_fk",
           "tableFrom": "node_metadata",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["node_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -487,12 +456,8 @@
           "name": "nodes_user_id_users_id_fk",
           "tableFrom": "nodes",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -576,12 +541,8 @@
           "name": "source_links_source_id_sources_id_fk",
           "tableFrom": "source_links",
           "tableTo": "sources",
-          "columnsFrom": [
-            "source_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -589,12 +550,8 @@
           "name": "source_links_node_id_nodes_id_fk",
           "tableFrom": "source_links",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["node_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -666,12 +623,8 @@
           "name": "sources_user_id_users_id_fk",
           "tableFrom": "sources",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -725,12 +678,8 @@
           "name": "user_profiles_user_id_users_id_fk",
           "tableFrom": "user_profiles",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }

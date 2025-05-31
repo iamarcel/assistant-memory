@@ -1,12 +1,9 @@
+import { findDayNode } from "../graph";
+import { QueryDayRequest, QueryDayResponse } from "../schemas/query-day";
 import { and, eq, ne, or } from "drizzle-orm";
 import { edges, nodeMetadata, nodes } from "~/db/schema";
-import { findDayNode } from "../graph";
 import { EdgeType } from "~/types/graph";
 import { useDatabase } from "~/utils/db";
-import {
-  QueryDayRequest,
-  QueryDayResponse,
-} from "../schemas/query-day";
 
 /**
  * Retrieve memories linked to a given day.
@@ -40,8 +37,14 @@ export async function queryDayMemories(
     .innerJoin(
       edges,
       or(
-        and(eq(edges.sourceNodeId, dayNodeId), eq(edges.targetNodeId, nodes.id)),
-        and(eq(edges.targetNodeId, dayNodeId), eq(edges.sourceNodeId, nodes.id)),
+        and(
+          eq(edges.sourceNodeId, dayNodeId),
+          eq(edges.targetNodeId, nodes.id),
+        ),
+        and(
+          eq(edges.targetNodeId, dayNodeId),
+          eq(edges.sourceNodeId, nodes.id),
+        ),
       ),
     )
     .innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodes.id))
@@ -61,7 +64,9 @@ export async function queryDayMemories(
 
   let formattedResult: string | undefined;
   if (includeFormattedResult && connectedNodes.length > 0) {
-    const nodesByEdge = connectedNodes.reduce<Record<string, (typeof connectedNodes)[number][]>>(
+    const nodesByEdge = connectedNodes.reduce<
+      Record<string, (typeof connectedNodes)[number][]>
+    >(
       (acc, node) => {
         const key: string = node.edgeType ?? "Unknown"; // 'key' is now explicitly a string
         (acc[key] ??= []).push(node);

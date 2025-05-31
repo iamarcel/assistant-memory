@@ -1,6 +1,6 @@
-import { z } from "zod";
 import { MessageSchema } from "../jobs/ingest-conversation";
 import { searchResultsSchema } from "../schemas/query-search";
+import { z } from "zod";
 
 export const DeepResearchJobInputSchema = z.object({
   userId: z.string(),

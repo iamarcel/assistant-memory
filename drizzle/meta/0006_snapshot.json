@@ -46,12 +46,8 @@
           "name": "aliases_user_id_users_id_fk",
           "tableFrom": "aliases",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -59,12 +55,8 @@
           "name": "aliases_canonical_node_id_nodes_id_fk",
           "tableFrom": "aliases",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "canonical_node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["canonical_node_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -149,12 +141,8 @@
           "name": "edge_embeddings_edge_id_edges_id_fk",
           "tableFrom": "edge_embeddings",
           "tableTo": "edges",
-          "columnsFrom": [
-            "edge_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["edge_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -289,12 +277,8 @@
           "name": "edges_user_id_users_id_fk",
           "tableFrom": "edges",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -302,12 +286,8 @@
           "name": "edges_source_node_id_nodes_id_fk",
           "tableFrom": "edges",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "source_node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_node_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -315,12 +295,8 @@
           "name": "edges_target_node_id_nodes_id_fk",
           "tableFrom": "edges",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "target_node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["target_node_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -330,11 +306,7 @@
         "edges_sourceNodeId_targetNodeId_edge_type_unique": {
           "name": "edges_sourceNodeId_targetNodeId_edge_type_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "source_node_id",
-            "target_node_id",
-            "edge_type"
-          ]
+          "columns": ["source_node_id", "target_node_id", "edge_type"]
         }
       },
       "policies": {},
@@ -415,12 +387,8 @@
           "name": "node_embeddings_node_id_nodes_id_fk",
           "tableFrom": "node_embeddings",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["node_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -495,12 +463,8 @@
           "name": "node_metadata_node_id_nodes_id_fk",
           "tableFrom": "node_metadata",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["node_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -510,9 +474,7 @@
         "node_metadata_nodeId_unique": {
           "name": "node_metadata_nodeId_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "node_id"
-          ]
+          "columns": ["node_id"]
         }
       },
       "policies": {},
@@ -592,12 +554,8 @@
           "name": "nodes_user_id_users_id_fk",
           "tableFrom": "nodes",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -681,12 +639,8 @@
           "name": "source_links_source_id_sources_id_fk",
           "tableFrom": "source_links",
           "tableTo": "sources",
-          "columnsFrom": [
-            "source_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -694,12 +648,8 @@
           "name": "source_links_node_id_nodes_id_fk",
           "tableFrom": "source_links",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["node_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -709,10 +659,7 @@
         "source_links_sourceId_nodeId_unique": {
           "name": "source_links_sourceId_nodeId_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "source_id",
-            "node_id"
-          ]
+          "columns": ["source_id", "node_id"]
         }
       },
       "policies": {},
@@ -835,12 +782,8 @@
           "name": "sources_user_id_users_id_fk",
           "tableFrom": "sources",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -850,11 +793,7 @@
         "sources_userId_type_externalId_unique": {
           "name": "sources_userId_type_externalId_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_id",
-            "type",
-            "external_id"
-          ]
+          "columns": ["user_id", "type", "external_id"]
         }
       },
       "policies": {},
@@ -904,12 +843,8 @@
           "name": "user_profiles_user_id_users_id_fk",
           "tableFrom": "user_profiles",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }

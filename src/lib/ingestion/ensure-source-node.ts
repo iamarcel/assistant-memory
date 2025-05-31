@@ -1,9 +1,9 @@
+import { ensureDayNode } from "../temporal";
 import { and, eq } from "drizzle-orm";
 import { DrizzleDB } from "~/db";
 import { edges, nodes, sourceLinks, NodeSelect } from "~/db/schema";
 import { EdgeTypeEnum, NodeType } from "~/types/graph";
 import { TypeId } from "~/types/typeid";
-import { ensureDayNode } from "../temporal";
 
 interface EnsureSourceNodeParams {
   db: DrizzleDB;
@@ -59,7 +59,9 @@ export async function ensureSourceNode({
       .returning();
 
     if (!newNode) {
-      throw new Error(`Failed to create ${nodeType} node for source ${sourceId}`);
+      throw new Error(
+        `Failed to create ${nodeType} node for source ${sourceId}`,
+      );
     }
 
     // Link to source
@@ -87,7 +89,7 @@ export async function ensureSourceNode({
         sourceNodeId: newNode.id,
         targetNodeId: dayNodeId,
       })
-      .onConflictDoNothing(); 
+      .onConflictDoNothing();
 
     graphNode = newNode;
   }

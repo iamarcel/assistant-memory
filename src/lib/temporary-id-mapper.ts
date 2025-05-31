@@ -48,6 +48,9 @@ export class TemporaryIdMapper<T, ID extends string = string> {
    * Returns all mappings as array of { item, id }.
    */
   public entries(): Array<{ item: T; id: ID }> {
-    return Array.from(this.itemToId.entries()).map(([item, id]) => ({ item, id }));
+    return Array.from(this.itemToId.entries()).map(([item, id]) => ({
+      item,
+      id,
+    }));
   }
 }

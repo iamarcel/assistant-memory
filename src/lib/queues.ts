@@ -2,10 +2,10 @@ import { assistantDreamJob } from "./jobs/atlas-assistant";
 import { processAtlasJob } from "./jobs/atlas-user";
 import { CleanupGraphJobInputSchema } from "./jobs/cleanup-graph";
 import { dream } from "./jobs/dream";
-import { DeepResearchJobInputSchema } from "./schemas/deep-research";
 import { IngestConversationJobInputSchema } from "./jobs/ingest-conversation";
 import { IngestDocumentJobInputSchema } from "./jobs/ingest-document";
 import { summarizeUserConversations } from "./jobs/summarize-conversation";
+import { DeepResearchJobInputSchema } from "./schemas/deep-research";
 import { FlowProducer, Queue, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { useDatabase } from "~/utils/db";
@@ -21,7 +21,9 @@ redisConnection.on("error", (err) => {
 });
 
 // Create the main batch processing queue
-export const batchQueue = new Queue("batchProcessing", { connection: redisConnection });
+export const batchQueue = new Queue("batchProcessing", {
+  connection: redisConnection,
+});
 
 export const flowProducer = new FlowProducer({ connection: redisConnection });
 
@@ -98,7 +100,7 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
         console.log(
           `Ingested conversation ${conversationId} for user ${userId}.`,
         );
-        
+
         // Queue deep research job if there are messages
         if (messages.length > 0) {
           // Simple throttling: add a low probability to reduce job frequency
@@ -106,23 +108,31 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           if (Math.random() < env.DEEP_RESEARCH_PROBABILITY || 0.5) {
             // Create a deterministic job ID to prevent duplicate jobs
             const jobId = `deep-research:${userId}:${conversationId}`;
-            
+
             // Check if job already exists before adding
             const existingJob = await batchQueue.getJob(jobId);
             if (!existingJob) {
-              await batchQueue.add("deep-research", {
-                userId,
-                conversationId,
-                messages,
-                lastNMessages: 3,
-              }, {
-                jobId,
-                removeOnComplete: true,
-                removeOnFail: 50,
-              });
-              console.log(`Queued deep research job for conversation ${conversationId}`);
+              await batchQueue.add(
+                "deep-research",
+                {
+                  userId,
+                  conversationId,
+                  messages,
+                  lastNMessages: 3,
+                },
+                {
+                  jobId,
+                  removeOnComplete: true,
+                  removeOnFail: 50,
+                },
+              );
+              console.log(
+                `Queued deep research job for conversation ${conversationId}`,
+              );
             } else {
-              console.log(`Skipping duplicate deep research job for conversation ${conversationId}`);
+              console.log(
+                `Skipping duplicate deep research job for conversation ${conversationId}`,
+              );
             }
           }
         }
@@ -133,9 +143,7 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           `Starting deep-research job for user ${userId}, conversation ${conversationId}`,
         );
 
-        const { performDeepResearch } = await import(
-          "./jobs/deep-research"
-        );
+        const { performDeepResearch } = await import("./jobs/deep-research");
         await performDeepResearch({
           userId,
           conversationId,
@@ -152,9 +160,7 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           `Starting ingest-document job for user ${userId}, document ${documentId}`,
         );
 
-        const { ingestDocument } = await import(
-          "./jobs/ingest-document"
-        );
+        const { ingestDocument } = await import("./jobs/ingest-document");
         await ingestDocument({
           db,
           userId,
@@ -162,9 +168,7 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           content,
           timestamp,
         });
-        console.log(
-          `Ingested document ${documentId} for user ${userId}.`,
-        );
+        console.log(`Ingested document ${documentId} for user ${userId}.`);
       } else if (job.name === "cleanup-graph") {
         const data = CleanupGraphJobInputSchema.parse({
           ...job.data,
@@ -174,7 +178,9 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           `Starting cleanup-graph job for user ${data.userId}, since ${data.since.toISOString()}`,
         );
 
-        const { runIterativeCleanup } = await import("./jobs/run-iterative-cleanup");
+        const { runIterativeCleanup } = await import(
+          "./jobs/run-iterative-cleanup"
+        );
         await runIterativeCleanup({
           ...data,
           iterations: 5, // default to 5 iterations per run

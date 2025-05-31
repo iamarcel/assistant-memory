@@ -91,7 +91,6 @@ ${xmlItems}
 </items>`;
 }
 
-
 // Group definitions for reranked search results
 type SearchGroups = {
   similarNodes: NodeSearchResult;

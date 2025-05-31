@@ -1,10 +1,10 @@
 import { defineEventHandler } from "h3";
 import { getAtlas, getAssistantAtlas } from "~/lib/atlas";
-import { useDatabase } from "~/utils/db";
 import {
   queryAtlasRequestSchema,
   queryAtlasResponseSchema,
 } from "~/lib/schemas/query-atlas";
+import { useDatabase } from "~/utils/db";
 
 export default defineEventHandler(async (event) => {
   const { userId, assistantId } = queryAtlasRequestSchema.parse(

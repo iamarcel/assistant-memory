@@ -29,6 +29,7 @@
     "preview": "node .output/server/index.mjs",
     "tsx": "tsx",
     "test": "vitest",
+    "build:check": "tsc --noEmit",
     "lint": "eslint src --ext .js,.mjs,.cjs,.ts",
     "lint:fix": "eslint src --ext .js,.mjs,.cjs,.ts --fix",
     "format": "prettier --check .",

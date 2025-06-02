@@ -102,7 +102,7 @@ async function handleTopic(
   );
   const score = await scoreDream(userId, systemPrompt, dream);
   if (score < 0.7) return;
-  await persistDream(db, userId, dayId, dream);
+  await persistDream(db, userId, dayId, topic, dream);
 }
 
 // 1. Structured analysis: propose search queries
@@ -215,6 +215,7 @@ async function persistDream(
   db: DrizzleDB,
   userId: string,
   dayId: TypeId<"node">,
+  label: string,
   dreamContent: string,
 ) {
   const inserted = await db
@@ -229,7 +230,7 @@ async function persistDream(
   const newNode = inserted[0]!;
   await db.insert(nodeMetadata).values({
     nodeId: newNode.id,
-    label: dreamContent,
+    label,
     description: dreamContent,
   });
   const emb = await generateEmbeddings({

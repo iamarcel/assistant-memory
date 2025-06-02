@@ -375,7 +375,7 @@ async function proposeGraphCleanup(
         `<edge source="${e.sourceTemp}" target="${e.targetTemp}" type="${e.type}">${e.description}</edge>`,
     )
     .join("\n");
-  const prompt = `You are a graph cleaning assistant. Given this subgraph, propose merges (pairs of temp IDs to merge), deletes (temp IDs to remove), additions (new edges, each with a concise description of its meaning), and any new nodes.
+  const prompt = `You are a graph cleaning assistant. Given this subgraph, propose merges (pairs of temp IDs to merge), deletes (temp IDs to remove), additions (new edges, each with a concise description of its meaning), and any new nodes. Delete any unclear or non-useful nodes entirely and ensure all edges linked to a deleted node are removed.
 Nodes:
 ${nodesList}
 Edges:

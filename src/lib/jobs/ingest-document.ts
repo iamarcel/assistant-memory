@@ -2,8 +2,10 @@ import { extractGraph } from "../extract-graph";
 import { ensureSourceNode } from "../ingestion/ensure-source-node";
 import { ensureUser } from "../ingestion/ensure-user";
 import { sourceService } from "../sources";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
+import { nodes, sourceLinks, sources } from "~/db/schema";
 import { NodeTypeEnum } from "~/types/graph";
 
 export const IngestDocumentJobInputSchema = z.object({
@@ -11,6 +13,7 @@ export const IngestDocumentJobInputSchema = z.object({
   documentId: z.string(),
   content: z.string(),
   timestamp: z.string().datetime().pipe(z.coerce.date()), // Handled by route, always a Date here
+  updateExisting: z.boolean().optional().default(false),
 });
 
 export type IngestDocumentJobInput = z.infer<
@@ -27,8 +30,50 @@ export async function ingestDocument({
   documentId,
   content,
   timestamp,
+  updateExisting,
 }: IngestDocumentParams): Promise<void> {
   await ensureUser(db, userId);
+
+  if (updateExisting) {
+    // Delete all nodes linked to sources for this document in a single query
+    await db.delete(nodes).where(
+      and(
+        eq(nodes.userId, userId),
+        inArray(
+          nodes.id,
+          db
+            .select({ nodeId: sourceLinks.nodeId })
+            .from(sourceLinks)
+            .where(
+              inArray(
+                sourceLinks.sourceId,
+                db
+                  .select({ id: sources.id })
+                  .from(sources)
+                  .where(
+                    and(
+                      eq(sources.userId, userId),
+                      eq(sources.type, "document"),
+                      eq(sources.externalId, documentId),
+                    ),
+                  ),
+              ),
+            ),
+        ),
+      ),
+    );
+
+    // Delete all sources for this document in a single query
+    await db
+      .delete(sources)
+      .where(
+        and(
+          eq(sources.userId, userId),
+          eq(sources.type, "document"),
+          eq(sources.externalId, documentId),
+        ),
+      );
+  }
 
   // Insert the document as a single source
   const { successes: insertedSourceInternalIds, failures } =

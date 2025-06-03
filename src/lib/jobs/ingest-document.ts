@@ -2,9 +2,9 @@ import { extractGraph } from "../extract-graph";
 import { ensureSourceNode } from "../ingestion/ensure-source-node";
 import { ensureUser } from "../ingestion/ensure-user";
 import { sourceService } from "../sources";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
-import { and, eq, inArray } from "drizzle-orm";
 import { nodes, sourceLinks, sources } from "~/db/schema";
 import { NodeTypeEnum } from "~/types/graph";
 
@@ -35,9 +35,37 @@ export async function ingestDocument({
   await ensureUser(db, userId);
 
   if (updateExisting) {
-    const existingSourcesQuery = db
-      .select({ id: sources.id })
-      .from(sources)
+    // Delete all nodes linked to sources for this document in a single query
+    await db.delete(nodes).where(
+      and(
+        eq(nodes.userId, userId),
+        inArray(
+          nodes.id,
+          db
+            .select({ nodeId: sourceLinks.nodeId })
+            .from(sourceLinks)
+            .where(
+              inArray(
+                sourceLinks.sourceId,
+                db
+                  .select({ id: sources.id })
+                  .from(sources)
+                  .where(
+                    and(
+                      eq(sources.userId, userId),
+                      eq(sources.type, "document"),
+                      eq(sources.externalId, documentId),
+                    ),
+                  ),
+              ),
+            ),
+        ),
+      ),
+    );
+
+    // Delete all sources for this document in a single query
+    await db
+      .delete(sources)
       .where(
         and(
           eq(sources.userId, userId),
@@ -45,34 +73,6 @@ export async function ingestDocument({
           eq(sources.externalId, documentId),
         ),
       );
-
-    const existingSources = await existingSourcesQuery;
-
-    if (existingSources.length) {
-      await db
-        .delete(nodes)
-        .where(
-          and(
-            eq(nodes.userId, userId),
-            inArray(
-              nodes.id,
-              db
-                .select({ nodeId: sourceLinks.nodeId })
-                .from(sourceLinks)
-                .where(
-                  inArray(
-                    sourceLinks.sourceId,
-                    existingSourcesQuery,
-                  ),
-                ),
-            ),
-          ),
-        );
-
-      for (const src of existingSources) {
-        await sourceService.deleteHard(userId, src.id);
-      }
-    }
   }
 
   // Insert the document as a single source

@@ -5,9 +5,8 @@ import {
 } from "~/lib/schemas/ingest-document-request";
 
 export default defineEventHandler(async (event) => {
-  const { userId, document, updateExisting } = ingestDocumentRequestSchema.parse(
-    await readBody(event),
-  );
+  const { userId, document, updateExisting } =
+    ingestDocumentRequestSchema.parse(await readBody(event));
   return ingestDocumentResponseSchema.parse(
     await saveMemory({ userId, document, updateExisting }),
   );

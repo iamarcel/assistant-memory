@@ -15,6 +15,7 @@ export async function saveMemory(
     documentId: req.document.id,
     content: req.document.content,
     timestamp: req.document.timestamp ?? new Date(),
+    updateExisting: req.updateExisting ?? false,
   });
 
   return {

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const ingestDocumentRequestSchema = z.object({
   userId: z.string(),
+  updateExisting: z.boolean().optional().default(false),
   document: z.object({
     id: z.string(),
     content: z.string(),

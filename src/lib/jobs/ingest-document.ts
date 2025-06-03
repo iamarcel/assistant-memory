@@ -4,6 +4,8 @@ import { ensureUser } from "../ingestion/ensure-user";
 import { sourceService } from "../sources";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { nodes, sourceLinks, sources } from "~/db/schema";
 import { NodeTypeEnum } from "~/types/graph";
 
 export const IngestDocumentJobInputSchema = z.object({
@@ -11,6 +13,7 @@ export const IngestDocumentJobInputSchema = z.object({
   documentId: z.string(),
   content: z.string(),
   timestamp: z.string().datetime().pipe(z.coerce.date()), // Handled by route, always a Date here
+  updateExisting: z.boolean().optional().default(false),
 });
 
 export type IngestDocumentJobInput = z.infer<
@@ -27,8 +30,50 @@ export async function ingestDocument({
   documentId,
   content,
   timestamp,
+  updateExisting,
 }: IngestDocumentParams): Promise<void> {
   await ensureUser(db, userId);
+
+  if (updateExisting) {
+    const existingSourcesQuery = db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(
+        and(
+          eq(sources.userId, userId),
+          eq(sources.type, "document"),
+          eq(sources.externalId, documentId),
+        ),
+      );
+
+    const existingSources = await existingSourcesQuery;
+
+    if (existingSources.length) {
+      await db
+        .delete(nodes)
+        .where(
+          and(
+            eq(nodes.userId, userId),
+            inArray(
+              nodes.id,
+              db
+                .select({ nodeId: sourceLinks.nodeId })
+                .from(sourceLinks)
+                .where(
+                  inArray(
+                    sourceLinks.sourceId,
+                    existingSourcesQuery,
+                  ),
+                ),
+            ),
+          ),
+        );
+
+      for (const src of existingSources) {
+        await sourceService.deleteHard(userId, src.id);
+      }
+    }
+  }
 
   // Insert the document as a single source
   const { successes: insertedSourceInternalIds, failures } =

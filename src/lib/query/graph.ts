@@ -1,12 +1,10 @@
-import { and, aliasedTable, eq, inArray, isNotNull } from "drizzle-orm";
 import { generateEmbeddings } from "../embeddings";
 import { findOneHopNodes, findSimilarNodes } from "../graph";
-import {
-  QueryGraphRequest,
-  QueryGraphResponse,
-} from "../schemas/query-graph";
+import { QueryGraphRequest, QueryGraphResponse } from "../schemas/query-graph";
+import { and, aliasedTable, eq, inArray, isNotNull } from "drizzle-orm";
+import { DrizzleDB } from "~/db";
 import { nodes, nodeMetadata, edges } from "~/db/schema";
-import type { EdgeType, NodeType } from "~/types/graph";
+import type { NodeType } from "~/types/graph";
 import type { TypeId } from "~/types/typeid";
 import { useDatabase } from "~/utils/db";
 
@@ -17,11 +15,32 @@ interface GraphNodeResult {
   description: string | null;
 }
 
-interface GraphEdgeResult {
-  source: TypeId<"node">;
-  target: TypeId<"node">;
-  edgeType: EdgeType;
-  description: string | null;
+async function fetchEdgesBetweenNodeIds(
+  db: DrizzleDB,
+  userId: string,
+  nodeIds: TypeId<"node">[],
+) {
+  const src = aliasedTable(nodeMetadata, "src");
+  const tgt = aliasedTable(nodeMetadata, "tgt");
+  return db
+    .select({
+      source: edges.sourceNodeId,
+      target: edges.targetNodeId,
+      edgeType: edges.edgeType,
+      description: edges.description,
+    })
+    .from(edges)
+    .innerJoin(src, eq(src.nodeId, edges.sourceNodeId))
+    .innerJoin(tgt, eq(tgt.nodeId, edges.targetNodeId))
+    .where(
+      and(
+        eq(edges.userId, userId),
+        inArray(edges.sourceNodeId, nodeIds),
+        inArray(edges.targetNodeId, nodeIds),
+        isNotNull(src.label),
+        isNotNull(tgt.label),
+      ),
+    );
 }
 
 export async function queryKnowledgeGraph(
@@ -43,35 +62,18 @@ export async function queryKnowledgeGraph(
       .innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodes.id))
       .where(and(eq(nodes.userId, userId), isNotNull(nodeMetadata.label)));
 
-    const nodeIds = nodeRows.map((n) => n.id);
-
+    // Ensure label is string, not null
+    const nodeRowsClean = nodeRows.map((n) => ({
+      ...n,
+      label: n.label ?? "",
+    }));
+    const nodeIds = nodeRowsClean.map((n) => n.id);
     if (nodeIds.length === 0) {
       return { nodes: [], edges: [] };
     }
 
-    const src = aliasedTable(nodeMetadata, "src");
-    const tgt = aliasedTable(nodeMetadata, "tgt");
-    const edgeRows = await db
-      .select({
-        source: edges.sourceNodeId,
-        target: edges.targetNodeId,
-        edgeType: edges.edgeType,
-        description: edges.description,
-      })
-      .from(edges)
-      .innerJoin(src, eq(src.nodeId, edges.sourceNodeId))
-      .innerJoin(tgt, eq(tgt.nodeId, edges.targetNodeId))
-      .where(
-        and(
-          eq(edges.userId, userId),
-          inArray(edges.sourceNodeId, nodeIds),
-          inArray(edges.targetNodeId, nodeIds),
-          isNotNull(src.label),
-          isNotNull(tgt.label),
-        ),
-      );
-
-    return { nodes: nodeRows, edges: edgeRows };
+    const edgeRows = await fetchEdgesBetweenNodeIds(db, userId, nodeIds);
+    return { nodes: nodeRowsClean, edges: edgeRows };
   }
 
   // Query-based subgraph
@@ -126,27 +128,6 @@ export async function queryKnowledgeGraph(
     return { nodes: [], edges: [] };
   }
 
-  const src = aliasedTable(nodeMetadata, "srcMeta");
-  const tgt = aliasedTable(nodeMetadata, "tgtMeta");
-  const edgeRows = await db
-    .select({
-      source: edges.sourceNodeId,
-      target: edges.targetNodeId,
-      edgeType: edges.edgeType,
-      description: edges.description,
-    })
-    .from(edges)
-    .innerJoin(src, eq(src.nodeId, edges.sourceNodeId))
-    .innerJoin(tgt, eq(tgt.nodeId, edges.targetNodeId))
-    .where(
-      and(
-        eq(edges.userId, userId),
-        inArray(edges.sourceNodeId, nodeIds),
-        inArray(edges.targetNodeId, nodeIds),
-        isNotNull(src.label),
-        isNotNull(tgt.label),
-      ),
-    );
-
+  const edgeRows = await fetchEdgesBetweenNodeIds(db, userId, nodeIds);
   return { nodes: Array.from(nodeMap.values()), edges: edgeRows };
 }

@@ -295,3 +295,36 @@ export async function findDayNode(
     .limit(1);
   return day?.id ?? null;
 }
+
+/**
+ * Helper to fetch all edges between a set of node IDs for a user.
+ * Returns edges where both source and target are in nodeIds and both have non-null labels.
+ */
+export async function fetchEdgesBetweenNodeIds(
+  db: DrizzleDB,
+  userId: string,
+  nodeIds: TypeId<"node">[],
+) {
+  if (nodeIds.length === 0) return [];
+  const src = aliasedTable(nodeMetadata, "src");
+  const tgt = aliasedTable(nodeMetadata, "tgt");
+  return db
+    .select({
+      source: edges.sourceNodeId,
+      target: edges.targetNodeId,
+      edgeType: edges.edgeType,
+      description: edges.description,
+    })
+    .from(edges)
+    .innerJoin(src, eq(src.nodeId, edges.sourceNodeId))
+    .innerJoin(tgt, eq(tgt.nodeId, edges.targetNodeId))
+    .where(
+      and(
+        eq(edges.userId, userId),
+        inArray(edges.sourceNodeId, nodeIds),
+        inArray(edges.targetNodeId, nodeIds),
+        isNotNull(src.label),
+        isNotNull(tgt.label),
+      ),
+    );
+}

@@ -10,7 +10,7 @@ import { sql, eq, gte, desc, and, inArray } from "drizzle-orm";
 import { zodResponseFormat } from "openai/helpers/zod.mjs";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
-import { nodes, edges, nodeMetadata, sourceLinks } from "~/db/schema";
+import { nodes, edges, nodeMetadata, sourceLinks, nodeEmbeddings } from "~/db/schema";
 import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
 import type { EdgeType, NodeType } from "~/types/graph";
 import { TypeId, typeIdSchema } from "~/types/typeid";
@@ -825,4 +825,53 @@ export async function truncateLongLabels(
 
   console.log(`Successfully truncated ${updatedCount} node labels`);
   return { updatedCount };
+}
+
+/**
+ * Generates embeddings for nodes that have labels but are missing embeddings.
+ * This is a cleanup operation to ensure all nodes with content have searchable embeddings.
+ */
+export async function generateMissingNodeEmbeddings(
+  userId: string,
+): Promise<{ generatedCount: number }> {
+  const db = await useDatabase();
+  
+  // Find nodes that have labels but no embeddings for this user
+  const nodesWithoutEmbeddings = await db
+    .select({
+      id: nodes.id,
+      label: nodeMetadata.label,
+      description: nodeMetadata.description,
+    })
+    .from(nodes)
+    .innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodes.id))
+    .leftJoin(nodeEmbeddings, eq(nodeEmbeddings.nodeId, nodes.id))
+    .where(
+      and(
+        eq(nodes.userId, userId),
+        sql`${nodeMetadata.label} IS NOT NULL`,
+        sql`trim(${nodeMetadata.label}) != ''`,
+        sql`${nodeEmbeddings.nodeId} IS NULL`,
+      ),
+    );
+
+  if (nodesWithoutEmbeddings.length === 0) {
+    console.log("No nodes found with labels but missing embeddings");
+    return { generatedCount: 0 };
+  }
+
+  console.log(`Found ${nodesWithoutEmbeddings.length} nodes with labels but missing embeddings`);
+
+  // Use the existing central embedding generation function
+  await generateAndInsertNodeEmbeddings(
+    db,
+    nodesWithoutEmbeddings.map((node) => ({
+      id: node.id,
+      label: node.label!,
+      description: node.description,
+    })),
+  );
+
+  console.log(`Successfully generated embeddings for ${nodesWithoutEmbeddings.length} nodes`);
+  return { generatedCount: nodesWithoutEmbeddings.length };
 }

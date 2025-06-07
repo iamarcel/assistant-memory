@@ -39,6 +39,11 @@ import {
   querySearchResponseSchema,
 } from "../lib/schemas/query-search.js";
 import {
+  QueryGraphRequest,
+  QueryGraphResponse,
+  queryGraphResponseSchema,
+} from "../lib/schemas/query-graph.js";
+import {
   SummarizeRequest,
   SummarizeResponse,
   summarizeResponseSchema,
@@ -152,6 +157,15 @@ export class MemoryClient {
       "POST",
       "/query/node-type",
       queryNodeTypeResponseSchema,
+      payload,
+    );
+  }
+
+  async queryGraph(payload: QueryGraphRequest): Promise<QueryGraphResponse> {
+    return this._fetch(
+      "POST",
+      "/query/graph",
+      queryGraphResponseSchema,
       payload,
     );
   }

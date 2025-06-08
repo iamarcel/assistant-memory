@@ -10,7 +10,13 @@ import { sql, eq, gte, desc, and, inArray } from "drizzle-orm";
 import { zodResponseFormat } from "openai/helpers/zod.mjs";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
-import { nodes, edges, nodeMetadata, sourceLinks, nodeEmbeddings } from "~/db/schema";
+import {
+  nodes,
+  edges,
+  nodeMetadata,
+  sourceLinks,
+  nodeEmbeddings,
+} from "~/db/schema";
 import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
 import type { EdgeType, NodeType } from "~/types/graph";
 import { TypeId, typeIdSchema } from "~/types/typeid";
@@ -784,7 +790,7 @@ export async function truncateLongLabels(
   userId: string,
 ): Promise<{ updatedCount: number }> {
   const db = await useDatabase();
-  
+
   // Find all nodeMetadata records with labels longer than 255 characters for this user
   const longLabelNodes = await db
     .select({
@@ -806,7 +812,9 @@ export async function truncateLongLabels(
     return { updatedCount: 0 };
   }
 
-  console.log(`Found ${longLabelNodes.length} nodes with labels longer than 255 characters`);
+  console.log(
+    `Found ${longLabelNodes.length} nodes with labels longer than 255 characters`,
+  );
 
   // Update each node's label to be truncated to 255 characters
   let updatedCount = 0;
@@ -818,8 +826,10 @@ export async function truncateLongLabels(
         .set({ label: truncatedLabel })
         .where(eq(nodeMetadata.id, node.id));
       updatedCount++;
-      
-      console.log(`Truncated label for node ${node.nodeId}: "${node.label.substring(0, 50)}..." -> "${truncatedLabel.substring(0, 50)}..."`);
+
+      console.log(
+        `Truncated label for node ${node.nodeId}: "${node.label.substring(0, 50)}..." -> "${truncatedLabel.substring(0, 50)}..."`,
+      );
     }
   }
 
@@ -835,7 +845,7 @@ export async function generateMissingNodeEmbeddings(
   userId: string,
 ): Promise<{ generatedCount: number }> {
   const db = await useDatabase();
-  
+
   // Find nodes that have labels but no embeddings for this user
   const nodesWithoutEmbeddings = await db
     .select({
@@ -860,7 +870,9 @@ export async function generateMissingNodeEmbeddings(
     return { generatedCount: 0 };
   }
 
-  console.log(`Found ${nodesWithoutEmbeddings.length} nodes with labels but missing embeddings`);
+  console.log(
+    `Found ${nodesWithoutEmbeddings.length} nodes with labels but missing embeddings`,
+  );
 
   // Use the existing central embedding generation function
   await generateAndInsertNodeEmbeddings(
@@ -872,6 +884,8 @@ export async function generateMissingNodeEmbeddings(
     })),
   );
 
-  console.log(`Successfully generated embeddings for ${nodesWithoutEmbeddings.length} nodes`);
+  console.log(
+    `Successfully generated embeddings for ${nodesWithoutEmbeddings.length} nodes`,
+  );
   return { generatedCount: nodesWithoutEmbeddings.length };
 }

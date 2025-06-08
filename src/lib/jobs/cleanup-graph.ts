@@ -10,7 +10,13 @@ import { sql, eq, gte, desc, and, inArray } from "drizzle-orm";
 import { zodResponseFormat } from "openai/helpers/zod.mjs";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
-import { nodes, edges, nodeMetadata, sourceLinks } from "~/db/schema";
+import {
+  nodes,
+  edges,
+  nodeMetadata,
+  sourceLinks,
+  nodeEmbeddings,
+} from "~/db/schema";
 import { EdgeTypeEnum, NodeTypeEnum } from "~/types/graph";
 import type { EdgeType, NodeType } from "~/types/graph";
 import { TypeId, typeIdSchema } from "~/types/typeid";
@@ -774,4 +780,112 @@ export function logProposalOverview(
       );
     });
   }
+}
+
+/**
+ * Truncates all node labels longer than 255 characters for a specific user.
+ * This is a simple cleanup operation to prevent excessively long labels from causing issues.
+ */
+export async function truncateLongLabels(
+  userId: string,
+): Promise<{ updatedCount: number }> {
+  const db = await useDatabase();
+
+  // Find all nodeMetadata records with labels longer than 255 characters for this user
+  const longLabelNodes = await db
+    .select({
+      id: nodeMetadata.id,
+      nodeId: nodeMetadata.nodeId,
+      label: nodeMetadata.label,
+    })
+    .from(nodeMetadata)
+    .innerJoin(nodes, eq(nodes.id, nodeMetadata.nodeId))
+    .where(
+      and(
+        eq(nodes.userId, userId),
+        sql`${nodeMetadata.label} IS NOT NULL`,
+        sql`length(${nodeMetadata.label}) > 255`,
+      ),
+    );
+
+  if (longLabelNodes.length === 0) {
+    return { updatedCount: 0 };
+  }
+
+  console.log(
+    `Found ${longLabelNodes.length} nodes with labels longer than 255 characters`,
+  );
+
+  // Update each node's label to be truncated to 255 characters
+  let updatedCount = 0;
+  for (const node of longLabelNodes) {
+    if (node.label) {
+      const truncatedLabel = node.label.substring(0, 255);
+      await db
+        .update(nodeMetadata)
+        .set({ label: truncatedLabel })
+        .where(eq(nodeMetadata.id, node.id));
+      updatedCount++;
+
+      console.log(
+        `Truncated label for node ${node.nodeId}: "${node.label.substring(0, 50)}..." -> "${truncatedLabel.substring(0, 50)}..."`,
+      );
+    }
+  }
+
+  console.log(`Successfully truncated ${updatedCount} node labels`);
+  return { updatedCount };
+}
+
+/**
+ * Generates embeddings for nodes that have labels but are missing embeddings.
+ * This is a cleanup operation to ensure all nodes with content have searchable embeddings.
+ */
+export async function generateMissingNodeEmbeddings(
+  userId: string,
+): Promise<{ generatedCount: number }> {
+  const db = await useDatabase();
+
+  // Find nodes that have labels but no embeddings for this user
+  const nodesWithoutEmbeddings = await db
+    .select({
+      id: nodes.id,
+      label: nodeMetadata.label,
+      description: nodeMetadata.description,
+    })
+    .from(nodes)
+    .innerJoin(nodeMetadata, eq(nodeMetadata.nodeId, nodes.id))
+    .leftJoin(nodeEmbeddings, eq(nodeEmbeddings.nodeId, nodes.id))
+    .where(
+      and(
+        eq(nodes.userId, userId),
+        sql`${nodeMetadata.label} IS NOT NULL`,
+        sql`trim(${nodeMetadata.label}) != ''`,
+        sql`${nodeEmbeddings.nodeId} IS NULL`,
+      ),
+    );
+
+  if (nodesWithoutEmbeddings.length === 0) {
+    console.log("No nodes found with labels but missing embeddings");
+    return { generatedCount: 0 };
+  }
+
+  console.log(
+    `Found ${nodesWithoutEmbeddings.length} nodes with labels but missing embeddings`,
+  );
+
+  // Use the existing central embedding generation function
+  await generateAndInsertNodeEmbeddings(
+    db,
+    nodesWithoutEmbeddings.map((node) => ({
+      id: node.id,
+      label: node.label!,
+      description: node.description,
+    })),
+  );
+
+  console.log(
+    `Successfully generated embeddings for ${nodesWithoutEmbeddings.length} nodes`,
+  );
+  return { generatedCount: nodesWithoutEmbeddings.length };
 }

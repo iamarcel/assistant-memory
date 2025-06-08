@@ -179,6 +179,22 @@ const worker = new Worker<SummarizeJobData | DreamJobData>(
           `Starting cleanup-graph job for user ${data.userId}, since ${data.since.toISOString()}`,
         );
 
+        // First, run basic cleanup operations
+        const { truncateLongLabels, generateMissingNodeEmbeddings } = await import(
+          "./jobs/cleanup-graph"
+        );
+        
+        console.log("Running basic cleanup operations...");
+        const [truncateResult, embeddingsResult] = await Promise.all([
+          truncateLongLabels(data.userId),
+          generateMissingNodeEmbeddings(data.userId),
+        ]);
+        
+        console.log(
+          `Basic cleanup completed: truncated ${truncateResult.updatedCount} labels, generated ${embeddingsResult.generatedCount} embeddings`,
+        );
+
+        // Then run the iterative graph cleanup
         const { runIterativeCleanup } = await import(
           "./jobs/run-iterative-cleanup"
         );

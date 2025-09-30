@@ -76,6 +76,19 @@ export class SourceService {
       }),
     );
 
+    const inputLookup = new Map<string, SourceCreateInput>();
+    const makeLookupKey = (
+      userId: string,
+      type: SourceType,
+      externalId: string,
+    ) => `${userId}:${type}:${externalId}`;
+    inputs.forEach((input) => {
+      inputLookup.set(
+        makeLookupKey(input.userId, input.sourceType, input.externalId),
+        input,
+      );
+    });
+
     const inserted = await this.db
       .insert(sources)
       .values(insertRows)
@@ -85,9 +98,15 @@ export class SourceService {
       .returning();
 
     // 2. Handle payloads
-    for (let i = 0; i < inserted.length; i++) {
-      const row = inserted[i]!;
-      const input = inputs[i]!;
+    for (const row of inserted) {
+      const lookupKey = makeLookupKey(row.userId, row.type, row.externalId);
+      const input = inputLookup.get(lookupKey);
+      if (!input) {
+        console.warn(
+          `No matching input found for inserted source ${row.id} (${lookupKey})`,
+        );
+        continue;
+      }
       const key = `${input.userId}/${row.id}`;
 
       // Inline payload if small enough or content provided

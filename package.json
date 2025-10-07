@@ -70,7 +70,9 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "@parcel/watcher",
+      "esbuild",
+      "msgpackr-extract"
     ]
   }
 }

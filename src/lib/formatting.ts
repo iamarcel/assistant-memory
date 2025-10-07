@@ -28,7 +28,7 @@ export function formatConversationAsXml(messages: Message[]): string {
 }
 
 /** Escape special characters for XML */
-function escapeXml(str: string): string {
+export function escapeXml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -58,8 +58,8 @@ export function formatNodesForPrompt(
     .map(
       (node) =>
         `<node id="${escapeXml(node.tempId)}" type="${escapeXml(node.type)}" timestamp="${node.timestamp}">
-  <label>${node.label ?? ""}</label>
-  <description>${node.description || ""}</description>
+  <label>${escapeXml(node.label ?? "")}</label>
+  <description>${escapeXml(node.description || "")}</description>
 </node>`,
     )
     .join("\n");
@@ -81,8 +81,8 @@ export function formatLabelDescList(
 
   const xmlItems = items
     .map(
-      (item) => `<item label="${escapeXml(item.label ?? "Unnamed")}"
->${item.description ?? ""}</item>`,
+      (item) =>
+        `<item label="${escapeXml(item.label ?? "Unnamed")}">${escapeXml(item.description ?? "")}</item>`,
     )
     .join("\n");
   return `<items>
@@ -105,8 +105,8 @@ export type SearchResults = RerankResult<SearchGroups>;
 // Helpers for formatting individual result items
 function formatSearchNode(node: NodeSearchResult): string {
   return `<node type="${escapeXml(node.type)}" timestamp="${formatISO(node.timestamp)}">
-  <label>${node.label ?? ""}</label>
-  <description>${node.description ?? ""}</description>
+  <label>${escapeXml(node.label ?? "")}</label>
+  <description>${escapeXml(node.description ?? "")}</description>
 </node>`;
 }
 
@@ -122,8 +122,12 @@ function formatSearchConnection(conn: OneHopNode): string {
   return `<edge from="${escapeXml(conn.sourceLabel ?? "")}" to="${escapeXml(
     conn.targetLabel ?? "",
   )}" type="${escapeXml(conn.edgeType)}" timestamp="${formatISO(conn.timestamp)}">
-  <description>${conn.description ?? ""}</description>
+  <description>${escapeXml(conn.description ?? "")}</description>
 </edge>`;
+}
+
+function assertNever(value: never, message: string): never {
+  throw new Error(message);
 }
 
 /**
@@ -141,7 +145,49 @@ export function formatSearchResultsAsXml(results: SearchResults): string {
               return formatSearchEdge(r.item);
             case "connections":
               return formatSearchConnection(r.item);
+            default:
+              return assertNever(
+                r.group,
+                `[formatSearchResultsAsXml] Unhandled search result group: ${String(
+                  r.group,
+                )}`,
+              );
           }
+        })
+        .join("\n")
+    : "";
+  return body;
+}
+
+export type SearchResultWithId = SearchResults[number] & { tempId: string };
+
+/**
+ * Format search results with temporary IDs so the LLM can reference them.
+ */
+export function formatSearchResultsWithIds(
+  results: SearchResultWithId[],
+): string {
+  const body = results.length
+    ? results
+        .map((r) => {
+          const inner = (() => {
+            switch (r.group) {
+              case "similarNodes":
+                return formatSearchNode(r.item);
+              case "similarEdges":
+                return formatSearchEdge(r.item);
+              case "connections":
+                return formatSearchConnection(r.item);
+              default:
+                return assertNever(
+                  r.group,
+                  `[formatSearchResultsWithIds] Unhandled search result group: ${String(
+                    r.group,
+                  )}`,
+                );
+            }
+          })();
+          return `<result id="${escapeXml(r.tempId)}">${inner}</result>`;
         })
         .join("\n")
     : "";

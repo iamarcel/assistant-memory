@@ -2,6 +2,12 @@ import { performStructuredAnalysis } from "../ai";
 import { storeDeepResearchResult } from "../cache/deep-research-cache";
 import { generateEmbeddings } from "../embeddings";
 import {
+  escapeXml,
+  formatSearchResultsWithIds,
+  type SearchResultWithId,
+  type SearchResults,
+} from "../formatting";
+import {
   findOneHopNodes,
   findSimilarEdges,
   findSimilarNodes,
@@ -14,6 +20,7 @@ import {
   DeepResearchJobInput,
   DeepResearchResult,
 } from "../schemas/deep-research";
+import { TemporaryIdMapper } from "../temporary-id-mapper";
 import { z } from "zod";
 import { DrizzleDB } from "~/db";
 import { useDatabase } from "~/utils/db";
@@ -28,6 +35,8 @@ type SearchGroups = {
 
 // Default TTL for deep research results (24 hours)
 const DEFAULT_TTL_SECONDS = 24 * 60 * 60;
+// Maximum number of refinement loops
+const MAX_SEARCH_LOOPS = 4;
 
 /**
  * Main job handler for deep research
@@ -42,8 +51,7 @@ export async function performDeepResearch(
   console.log(`Starting deep research for conversation ${conversationId}`);
 
   try {
-    // Get search queries based on recent conversation turns
-    // Filter to only include user and assistant messages
+    // Prepare initial queries based on recent conversation turns
     const recentMessages = messages
       .slice(-lastNMessages)
       .filter((m) => m.role === "user" || m.role === "assistant");
@@ -54,11 +62,16 @@ export async function performDeepResearch(
       return;
     }
 
-    // Execute search queries and aggregate results
-    const searchResults = await executeDeepSearchQueries(db, userId, queries);
+    // Run iterative search/refine loop
+    const searchResults = await runIterativeSearch(
+      db,
+      userId,
+      recentMessages,
+      queries,
+    );
 
-    // Process results and cache them
-    await cacheDeepResearchResults(userId, conversationId, searchResults);
+    // Cache the combined results
+    await cacheDeepResearchResults(userId, conversationId, [searchResults]);
 
     console.log(`Deep research completed for conversation ${conversationId}`);
   } catch (error) {
@@ -82,7 +95,7 @@ async function generateSearchQueries(
 
   // Format messages for context
   const messageContext = messages
-    .map((m) => `<message role="${m.role}">${m.content}</message>`)
+    .map((m) => `<message role="${m.role}">${escapeXml(m.content)}</message>`)
     .join("\n");
 
   // Use structured analysis to generate tangential search queries
@@ -107,6 +120,133 @@ Come up with 1-5 search queries that explore adjacent or less obvious connection
   } catch (error) {
     console.error("Failed to generate search queries:", error);
     return [];
+  }
+}
+
+/**
+ * Run iterative search with LLM refinement.
+ */
+async function runIterativeSearch(
+  db: DrizzleDB,
+  userId: string,
+  messages: DeepResearchJobInput["messages"],
+  initialQueries: string[],
+): Promise<RerankResult<SearchGroups>> {
+  const queue = [...initialQueries];
+  const history: string[] = [];
+  let results: SearchResultWithId[] = [];
+  let tempIdCounter = 0;
+  const mapper = new TemporaryIdMapper<SearchResults[number], string>(
+    () => `r${++tempIdCounter}`,
+  );
+  const seen = new Set<string>();
+  let loops = 0;
+
+  while (loops < MAX_SEARCH_LOOPS && queue.length > 0) {
+    const query = queue.shift()!;
+    history.push(query);
+
+    const embResp = await generateEmbeddings({
+      model: "jina-embeddings-v3",
+      task: "retrieval.query",
+      input: [query],
+      truncate: true,
+    });
+    const embedding = embResp.data[0]?.embedding;
+    if (embedding) {
+      const res = await executeSearchWithEmbedding(
+        db,
+        userId,
+        query,
+        embedding,
+        20,
+      );
+      if (res) {
+        const dedup = res.filter((r) => {
+          const key = `${r.group}:${r.item.id}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        results.push(...mapper.mapItems(dedup));
+      }
+    }
+
+    loops++;
+    if (loops >= MAX_SEARCH_LOOPS) break;
+
+    const refinement = await refineSearchResults(
+      userId,
+      messages,
+      history,
+      results,
+    );
+    if (refinement.dropIds.length) {
+      const drop = new Set(refinement.dropIds);
+      results = results.filter((r) => !drop.has(r.tempId));
+    }
+    if (refinement.done) break;
+    if (refinement.nextQuery) queue.push(refinement.nextQuery);
+  }
+
+  return results.map(({ tempId, ...rest }) => rest);
+}
+
+interface RefinementResult {
+  dropIds: string[];
+  done: boolean;
+  nextQuery?: string;
+}
+
+/**
+ * Ask the LLM to refine search results.
+ */
+async function refineSearchResults(
+  userId: string,
+  messages: DeepResearchJobInput["messages"],
+  queries: string[],
+  results: SearchResultWithId[],
+): Promise<RefinementResult> {
+  const schema = z
+    .object({
+      dropIds: z.array(z.string()).default([]),
+      done: z.boolean(),
+      nextQuery: z.string().optional(),
+    })
+    .describe("DeepResearchRefinement");
+
+  const messageContext = messages
+    .map((m) => `<message role="${m.role}">${escapeXml(m.content)}</message>`)
+    .join("\n");
+  const queriesXml = queries
+    .map((q) => `<query>${escapeXml(q)}</query>`)
+    .join("\n");
+  const resultsXml = formatSearchResultsWithIds(results);
+
+  try {
+    return await performStructuredAnalysis({
+      userId,
+      systemPrompt: "You refine background search results.",
+      prompt: `<conversation>
+${messageContext}
+</conversation>
+
+<queries>
+${queriesXml}
+</queries>
+
+<results>
+${resultsXml}
+</results>
+
+<system:instruction>
+Remove irrelevant results by listing their ids in dropIds. If more searching is needed, set done=false and provide nextQuery. If satisfied, set done=true.
+</system:instruction>`,
+      schema,
+    });
+  } catch (error) {
+    console.error("Failed to refine deep search results:", error);
+    return { dropIds: [], done: true };
   }
 }
 

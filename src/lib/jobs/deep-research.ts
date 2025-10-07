@@ -2,6 +2,7 @@ import { performStructuredAnalysis } from "../ai";
 import { storeDeepResearchResult } from "../cache/deep-research-cache";
 import { generateEmbeddings } from "../embeddings";
 import {
+  escapeXml,
   formatSearchResultsWithIds,
   type SearchResultWithId,
   type SearchResults,
@@ -94,7 +95,7 @@ async function generateSearchQueries(
 
   // Format messages for context
   const messageContext = messages
-    .map((m) => `<message role="${m.role}">${m.content}</message>`)
+    .map((m) => `<message role="${m.role}">${escapeXml(m.content)}</message>`)
     .join("\n");
 
   // Use structured analysis to generate tangential search queries
@@ -134,8 +135,9 @@ async function runIterativeSearch(
   const queue = [...initialQueries];
   const history: string[] = [];
   let results: SearchResultWithId[] = [];
+  let tempIdCounter = 0;
   const mapper = new TemporaryIdMapper<SearchResults[number], string>(
-    (_item, idx) => `r${idx + 1}`,
+    () => `r${++tempIdCounter}`,
   );
   const seen = new Set<string>();
   let loops = 0;
@@ -161,7 +163,7 @@ async function runIterativeSearch(
       );
       if (res) {
         const dedup = res.filter((r) => {
-          const key = `${r.group}:${(r.item as any).id}`;
+          const key = `${r.group}:${r.item.id}`;
           if (seen.has(key)) return false;
           seen.add(key);
           return true;
@@ -214,9 +216,11 @@ async function refineSearchResults(
     .describe("DeepResearchRefinement");
 
   const messageContext = messages
-    .map((m) => `<message role="${m.role}">${m.content}</message>`)
+    .map((m) => `<message role="${m.role}">${escapeXml(m.content)}</message>`)
     .join("\n");
-  const queriesXml = queries.map((q) => `<query>${q}</query>`).join("\n");
+  const queriesXml = queries
+    .map((q) => `<query>${escapeXml(q)}</query>`)
+    .join("\n");
   const resultsXml = formatSearchResultsWithIds(results);
 
   try {

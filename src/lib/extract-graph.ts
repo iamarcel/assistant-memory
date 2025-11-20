@@ -122,17 +122,28 @@ Extract the graph from the following ${sourceType}:
 ${content}
 </${sourceType}>
 
+CRITICAL EXTRACTION RULES - READ CAREFULLY:
+
+When extracting from conversations:
+- ONLY extract facts that the USER explicitly stated, confirmed, or provided
+- DO NOT extract speculative statements, suggestions, or assumptions made by the assistant
+- DO NOT treat assistant's questions as facts (e.g., "Are you working on X?" is NOT a fact that the user is working on X)
+- DO NOT extract assistant's interpretations unless the user confirmed them
+- If the assistant makes a statement and the user corrects it, ONLY extract the user's correction as fact
+- Prioritize user's own statements about themselves, their experiences, preferences, and circumstances
+- Be especially cautious with information only mentioned by the assistant - verify if the user confirmed it
+
 Extract, for example, the following elements:
-1. People mentioned (real or fictional)
-2. Locations discussed
-3. Events that occurred or were mentioned
-4. Objects or items of significance
-5. Emotions expressed or discussed
-6. Concepts or ideas explored
-7. Media mentioned (books, movies, articles, etc.)
-8. Temporal references (dates, times, periods)
-9. The assistant's emotions and feelings
-10. The assistant's internal insights or discoveries about the user
+1. People mentioned by the user (real or fictional)
+2. Locations the user discussed or mentioned
+3. Events that the user stated occurred or experienced
+4. Objects or items the user mentioned as significant
+5. Emotions the user expressed or discussed
+6. Concepts or ideas the user explored or mentioned
+7. Media the user mentioned (books, movies, articles, etc.)
+8. Temporal references the user provided (dates, times, periods)
+9. The user's preferences, goals, projects, and plans
+10. Facts the user stated about other people or entities
 
 For each element, create a node with:
 - A unique temporary ID (format: "temp_[type]_[number]", e.g., "temp_person_1") if it's a NEW node.
@@ -142,6 +153,7 @@ For each element, create a node with:
 
 Then, link these nodes with edges.
 - Edges are mainly used to represent "facts" about nodes. For example, if you have a Person node and an Event node, you can create an edge from the Person node to the Event node to represent the fact that the person participated in the event.
+- ONLY create edges for facts explicitly stated by the user, not assistant assumptions
 - Edges are unique by source node, target node, and edge type
 - In the edge description for facts, give a succinct description of the fact. Add some minimal context to aid retrieval, but keep it concise.
 - Ideally, edges link to already-existing nodes. If the node isn't existing, create it.
@@ -153,11 +165,11 @@ Rules of the graph:
 - Omit unnecessary details in node names, eg. "John Doe" instead of "John Doe (person)"
 - Nodes are independent of context and represent a *single* thing. Bad example: "John - the person taking a walk". Good example: "John" (Person node, no description) linked to [PARTICIPATED_IN] "John's walk on 2025-05-18" (Event node), linked to [OCCURRED_ON] "2025-05-18" (Temporal node).
 - Don't create nodes for things that should be represented by edges.
-
+- Avoid redundant or duplicate information - if a fact is already represented, don't create another node or edge for it
 
 Then create edges between these nodes to represent their relationships using the appropriate edge types.
 
-Focus on extracting the most significant and meaningful information. Quality is more important than quantity.`;
+Focus on extracting the most significant and meaningful information that the USER provided. Quality and accuracy are more important than quantity.`;
 
   const completion = await client.beta.chat.completions.parse({
     messages: [{ role: "user", content: prompt }],

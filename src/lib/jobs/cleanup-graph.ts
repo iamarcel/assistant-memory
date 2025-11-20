@@ -369,6 +369,12 @@ async function proposeGraphCleanup(
   modelId: string,
 ): Promise<CleanupProposal> {
   const client = await createCompletionClient(userId);
+
+  // Fetch user atlas for context about user corrections and current state
+  const { getAtlas } = await import("../atlas");
+  const db = await useDatabase();
+  const { description: userAtlas } = await getAtlas(db, userId);
+
   const nodesList = temp.nodes
     .map(
       (n) =>
@@ -381,9 +387,59 @@ async function proposeGraphCleanup(
         `<edge source="${e.sourceTemp}" target="${e.targetTemp}" type="${e.type}">${e.description}</edge>`,
     )
     .join("\n");
-  const prompt = `You are a graph cleaning assistant. Given this subgraph, propose merges (pairs of temp IDs to merge), deletes (temp IDs to remove), additions (new edges, each with a concise description of its meaning), and any new nodes. Delete any unclear or non-useful nodes entirely and ensure all edges linked to a deleted node are removed.
+  const prompt = `You are a graph cleaning assistant. Your task is to analyze this subgraph and propose improvements to ensure accuracy, remove redundancies, and maintain data quality.
+${
+  userAtlas
+    ? `
+**User Atlas Context:**
+The following is the current User Atlas, which represents the most up-to-date factual information about the user. Use this to identify any nodes in the graph that contradict or are outdated compared to the atlas.
+
+<user_atlas>
+${userAtlas}
+</user_atlas>
+`
+    : ""
+}
+
+**Critical Cleaning Rules:**
+
+1. **Check Against User Atlas**: If a User Atlas is provided above, use it as the source of truth:
+   - Delete any nodes that contradict information in the atlas
+   - Remove nodes that represent outdated information superseded by the atlas
+   - The atlas reflects user corrections and the most current factual information
+
+2. **Remove Redundant Nodes**: Identify and merge nodes that represent the same entity or concept. Look for:
+   - Duplicate entities with slightly different labels (e.g., "John Smith" and "John")
+   - Multiple nodes describing the same event or concept
+   - Nodes that could be consolidated without losing information
+
+3. **Delete Incorrect or Speculative Information**: Remove nodes that represent:
+   - Speculative or assumed information (not explicitly stated facts)
+   - Outdated information that has been superseded or contradicted
+   - Unclear or non-useful nodes with vague descriptions
+   - Nodes that don't represent factual information about the user
+
+4. **Identify Contradictions**: When you find contradicting information:
+   - Keep the most recent or most specific information
+   - Delete older or vaguer contradicting nodes
+   - Prefer user-stated facts over inferred information
+   - Always prefer atlas information over graph nodes when they conflict
+
+5. **Improve Connections**: Add missing edges between related nodes that should be connected
+
+6. **Remove Redundant Edges**: Don't create edges that duplicate existing relationships
+
+**Your Response Should Include:**
+- **merges**: Pairs of temp IDs where nodes are duplicates (remove will be merged into keep)
+- **deletes**: Temp IDs of nodes to completely remove (speculative, outdated, or unclear)
+- **additions**: New edges to add (with concise, factual descriptions)
+- **newNodes**: Any new nodes needed (only if genuinely missing and factual)
+
+**Important**: Be aggressive about removing redundant and speculative information. Quality and accuracy are more important than quantity.
+
 Nodes:
 ${nodesList}
+
 Edges:
 ${edgesList}
 `;

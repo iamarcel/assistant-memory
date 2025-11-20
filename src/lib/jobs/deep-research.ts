@@ -189,7 +189,10 @@ async function runIterativeSearch(
     if (refinement.nextQuery) queue.push(refinement.nextQuery);
   }
 
-  return results.map(({ tempId, ...rest }) => rest);
+  return results.map((result) => {
+    delete result.tempId;
+    return result;
+  });
 }
 
 interface RefinementResult {
@@ -254,40 +257,6 @@ Remove irrelevant results by listing their ids in dropIds. If more searching is 
  * Execute multiple search queries in parallel with higher limits
  * and return combined results
  */
-async function executeDeepSearchQueries(
-  db: DrizzleDB,
-  userId: string,
-  queries: string[],
-): Promise<RerankResult<SearchGroups>[]> {
-  // Deep search uses higher limits than real-time search
-  const deepSearchLimit = 20;
-
-  // Run all search queries in parallel
-  const searchResults = await Promise.all(
-    queries.map(async (query) => {
-      // Reuse same embedding generation from searchMemory function
-      const embeddingsResponse = await generateEmbeddings({
-        model: "jina-embeddings-v3",
-        task: "retrieval.query",
-        input: [query],
-        truncate: true,
-      });
-      const embedding = embeddingsResponse.data[0]?.embedding;
-      if (!embedding) return null;
-
-      return executeSearchWithEmbedding(
-        db,
-        userId,
-        query,
-        embedding,
-        deepSearchLimit,
-      );
-    }),
-  );
-
-  // Filter out null results
-  return searchResults.filter(Boolean) as RerankResult<SearchGroups>[];
-}
 
 /**
  * Execute a single search with the provided embedding

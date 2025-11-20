@@ -3,6 +3,7 @@ import { defineEventHandler, readBody } from "h3";
 import { CleanupGraphParams } from "~/lib/jobs/cleanup-graph";
 import { batchQueue, DreamJobData, flowProducer } from "~/lib/queues";
 import { dreamRequestSchema, dreamResponseSchema } from "~/lib/schemas/dream";
+import { env } from "~/utils/env";
 
 export default defineEventHandler(async (event) => {
   const { userId, assistantId, assistantDescription } =

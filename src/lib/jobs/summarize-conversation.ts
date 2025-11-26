@@ -78,18 +78,32 @@ export async function summarizeUserConversations(
       continue;
     }
 
-    const prompt = `You are a conversation summarizer. Your task is to analyze the following conversation and extract the most important information to create a summary.
+    const prompt = `You are a conversation summarizer extracting facts for a personal knowledge graph.
 
-Return (a) a title and (b) a summary, which is a set of concise, information-dense bullet point lists with important information to remember. Write down:
+CRITICAL: Only capture facts the USER explicitly stated. The assistant may speculate, infer, or make things up—do NOT treat assistant statements as facts about the user unless the user confirmed them.
 
-- Key people mentioned (outside of the participants)
-- Key events, experiences, or observations
-- The evolution throughout the conversation
-- The user's emotions and feelings
-- The assistant's internal insights or discoveries
-- The assistant's internal decisions, realizations and conclusions for later
+Return (a) a title and (b) a summary with concise, information-dense bullet points.
 
-Do not include any irrelevant information. Do not mention things like "not explicitly stated"—just omit the point or even the full header altogether.
+**Prioritize user-stated information:**
+- Facts the user directly shared about themselves, their life, work, relationships
+- Names, places, dates, preferences, opinions the user mentioned
+- Experiences, events, or stories the user described
+- Emotions or feelings the user expressed
+- Decisions or intentions the user stated
+- Questions or topics the user wanted to explore
+
+**Include selectively (only if clearly grounded):**
+- People mentioned by name and their relationship to the user
+- Key conclusions or insights the user arrived at (not the assistant's suggestions)
+- Action items or next steps the user committed to
+
+**Exclude:**
+- Assistant speculation about the user ("you might be...", "perhaps you feel...")
+- Assistant suggestions the user didn't explicitly accept
+- Generic advice or information the assistant provided
+- Anything uncertain or inferred—when in doubt, leave it out
+
+Format: Use headers only when there are items for that section. Omit empty sections entirely.
 
 <conversation>
 ${formatConversationAsXml(turns)}
